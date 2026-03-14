@@ -172,9 +172,13 @@ const Checkout = () => {
       const { error: itemsErr } = await supabase.from('order_items').insert(orderItems);
       if (itemsErr) throw itemsErr;
 
-      // Update coupon usage
+      // Update coupon usage - fire and forget
       if (appliedCoupon) {
-        await supabase.rpc('increment_coupon_usage' as any, { coupon_code_input: appliedCoupon }).catch(() => {});
+        supabase
+          .from('coupons')
+          .update({ used_count: 1 })
+          .eq('code', appliedCoupon)
+          .then(() => {});
       }
 
       await clearCart();
