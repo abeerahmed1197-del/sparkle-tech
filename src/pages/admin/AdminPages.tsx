@@ -164,13 +164,13 @@ export const AdminCustomers = () => {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useState(() => {
+  useEffect(() => {
     (async () => {
       const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
       setProfiles(data || []);
       setLoading(false);
     })();
-  });
+  }, []);
 
   return (
     <div>
