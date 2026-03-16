@@ -16,7 +16,7 @@ import { useProducts, useCategories, useBrands } from '@/hooks/useProducts';
 
 const Shop = () => {
   const [searchParams] = useSearchParams();
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(searchParams.get('search') || '');
   const [sort, setSort] = useState('newest');
   const [priceRange, setPriceRange] = useState([0, 1500]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>(

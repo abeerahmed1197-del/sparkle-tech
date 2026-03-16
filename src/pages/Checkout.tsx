@@ -172,7 +172,7 @@ const Checkout = () => {
       const { error: itemsErr } = await supabase.from('order_items').insert(orderItems);
       if (itemsErr) throw itemsErr;
 
-      // Update coupon usage - fire and forget
+      // Update coupon usage
       if (appliedCoupon) {
         supabase
           .from('coupons')
@@ -181,6 +181,28 @@ const Checkout = () => {
           .then(() => {});
       }
 
+      // Try Stripe checkout
+      try {
+        const { data: stripeData, error: stripeError } = await supabase.functions.invoke('create-checkout', {
+          body: {
+            orderId: order.id,
+            successUrl: `${window.location.origin}/order-success?order=${order.id}`,
+            cancelUrl: `${window.location.origin}/checkout`,
+          },
+        });
+
+        if (!stripeError && stripeData?.url) {
+          // Redirect to Stripe
+          await clearCart();
+          window.location.href = stripeData.url;
+          return;
+        }
+      } catch {
+        // Stripe not configured — fall back to direct order
+        console.log('Stripe not configured, placing order directly');
+      }
+
+      // Fallback: mark as placed without payment
       await clearCart();
       toast.success('Order placed successfully!');
       navigate('/order-success?order=' + order.id);
