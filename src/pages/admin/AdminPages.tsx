@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -164,13 +164,13 @@ export const AdminCustomers = () => {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useState(() => {
+  useEffect(() => {
     (async () => {
       const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
       setProfiles(data || []);
       setLoading(false);
     })();
-  });
+  }, []);
 
   return (
     <div>
