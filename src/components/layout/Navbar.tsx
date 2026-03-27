@@ -14,7 +14,7 @@ import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
-import { useCategories } from '@/hooks/useProducts';
+import { useCategories, useUserRoles } from '@/hooks/useProducts';
 import { useState, useEffect, useRef } from 'react';
 import SearchCommand from '@/components/layout/SearchCommand';
 import gsap from 'gsap';
@@ -34,6 +34,8 @@ const Navbar = () => {
   const { user, signOut } = useAuth();
   const { theme, setTheme, resolvedTheme } = useTheme();
   const { data: categories } = useCategories();
+  const { data: roles } = useUserRoles();
+  const isAdmin = roles?.some(r => r.role === 'admin');
   const [searchOpen, setSearchOpen] = useState(false);
   const navigate = useNavigate();
   const navRef = useRef<HTMLElement>(null);
@@ -156,6 +158,12 @@ const Navbar = () => {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
+                  {isAdmin && (
+                    <DropdownMenuItem asChild>
+                      <Link to="/admin" className="cursor-pointer font-medium">Admin Panel</Link>
+                    </DropdownMenuItem>
+                  )}
+                  {isAdmin && <DropdownMenuSeparator />}
                   <DropdownMenuItem asChild>
                     <Link to="/dashboard" className="cursor-pointer">My Account</Link>
                   </DropdownMenuItem>
