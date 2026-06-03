@@ -215,7 +215,9 @@ const AdminProducts = () => {
             </div>
             <div className="sm:col-span-2"><Label>Short Description</Label><Input className="mt-1" value={form.short_description} onChange={e => setForm(p => ({ ...p, short_description: e.target.value }))} /></div>
             <div className="sm:col-span-2"><Label>Description</Label><Textarea className="mt-1" rows={4} value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} /></div>
-            <div className="flex items-center gap-4">
+            <div><Label>Color (optional)</Label><Input className="mt-1" placeholder="e.g. Midnight Black" value={form.color} onChange={e => setForm(p => ({ ...p, color: e.target.value }))} /></div>
+            <div><Label>Memory (optional)</Label><Input className="mt-1" placeholder="e.g. 128GB" value={form.memory} onChange={e => setForm(p => ({ ...p, memory: e.target.value }))} /></div>
+            <div className="sm:col-span-2 flex items-center gap-4">
               <div className="flex items-center gap-2"><Switch checked={form.is_featured} onCheckedChange={v => setForm(p => ({ ...p, is_featured: v }))} /><Label>Featured</Label></div>
               <div className="flex items-center gap-2"><Switch checked={form.is_new} onCheckedChange={v => setForm(p => ({ ...p, is_new: v }))} /><Label>New</Label></div>
               <div className="flex items-center gap-2"><Switch checked={form.is_best_seller} onCheckedChange={v => setForm(p => ({ ...p, is_best_seller: v }))} /><Label>Best Seller</Label></div>
