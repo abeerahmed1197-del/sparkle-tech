@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 const emptyProduct = {
   name: '', slug: '', description: '', short_description: '', price: '', discount_price: '',
   stock: '0', sku: '', category_id: '', brand_id: '', is_featured: false, is_new: false, is_best_seller: false,
+  color: '', memory: '',
 };
 
 const AdminProducts = () => {
@@ -49,6 +50,7 @@ const AdminProducts = () => {
       price: String(p.price), discount_price: p.discount_price ? String(p.discount_price) : '',
       stock: String(p.stock), sku: p.sku || '', category_id: p.category_id || '', brand_id: p.brand_id || '',
       is_featured: p.is_featured, is_new: p.is_new, is_best_seller: p.is_best_seller,
+      color: p.specifications?.color || '', memory: p.specifications?.memory || '',
     });
     setExistingImages(p.product_images?.map((i: any) => ({ id: i.id, url: i.url })) || []);
     setImageFiles([]);
@@ -60,6 +62,9 @@ const AdminProducts = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
+      const specs: Record<string, string> = {};
+      if (form.color.trim()) specs.color = form.color.trim();
+      if (form.memory.trim()) specs.memory = form.memory.trim();
       const productData: any = {
         name: form.name,
         slug: form.slug || generateSlug(form.name),
@@ -74,6 +79,7 @@ const AdminProducts = () => {
         is_featured: form.is_featured,
         is_new: form.is_new,
         is_best_seller: form.is_best_seller,
+        specifications: specs,
       };
 
       let productId = editId;
@@ -209,7 +215,9 @@ const AdminProducts = () => {
             </div>
             <div className="sm:col-span-2"><Label>Short Description</Label><Input className="mt-1" value={form.short_description} onChange={e => setForm(p => ({ ...p, short_description: e.target.value }))} /></div>
             <div className="sm:col-span-2"><Label>Description</Label><Textarea className="mt-1" rows={4} value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} /></div>
-            <div className="flex items-center gap-4">
+            <div><Label>Color (optional)</Label><Input className="mt-1" placeholder="e.g. Midnight Black" value={form.color} onChange={e => setForm(p => ({ ...p, color: e.target.value }))} /></div>
+            <div><Label>Memory (optional)</Label><Input className="mt-1" placeholder="e.g. 128GB" value={form.memory} onChange={e => setForm(p => ({ ...p, memory: e.target.value }))} /></div>
+            <div className="sm:col-span-2 flex items-center gap-4">
               <div className="flex items-center gap-2"><Switch checked={form.is_featured} onCheckedChange={v => setForm(p => ({ ...p, is_featured: v }))} /><Label>Featured</Label></div>
               <div className="flex items-center gap-2"><Switch checked={form.is_new} onCheckedChange={v => setForm(p => ({ ...p, is_new: v }))} /><Label>New</Label></div>
               <div className="flex items-center gap-2"><Switch checked={form.is_best_seller} onCheckedChange={v => setForm(p => ({ ...p, is_best_seller: v }))} /><Label>Best Seller</Label></div>
