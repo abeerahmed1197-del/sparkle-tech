@@ -62,6 +62,9 @@ const AdminProducts = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
+      const specs: Record<string, string> = {};
+      if (form.color.trim()) specs.color = form.color.trim();
+      if (form.memory.trim()) specs.memory = form.memory.trim();
       const productData: any = {
         name: form.name,
         slug: form.slug || generateSlug(form.name),
@@ -76,6 +79,7 @@ const AdminProducts = () => {
         is_featured: form.is_featured,
         is_new: form.is_new,
         is_best_seller: form.is_best_seller,
+        specifications: specs,
       };
 
       let productId = editId;
