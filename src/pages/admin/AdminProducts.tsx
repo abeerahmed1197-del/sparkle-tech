@@ -50,6 +50,7 @@ const AdminProducts = () => {
       price: String(p.price), discount_price: p.discount_price ? String(p.discount_price) : '',
       stock: String(p.stock), sku: p.sku || '', category_id: p.category_id || '', brand_id: p.brand_id || '',
       is_featured: p.is_featured, is_new: p.is_new, is_best_seller: p.is_best_seller,
+      color: p.specifications?.color || '', memory: p.specifications?.memory || '',
     });
     setExistingImages(p.product_images?.map((i: any) => ({ id: i.id, url: i.url })) || []);
     setImageFiles([]);
