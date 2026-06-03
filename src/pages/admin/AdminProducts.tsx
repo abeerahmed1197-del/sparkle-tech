@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 const emptyProduct = {
   name: '', slug: '', description: '', short_description: '', price: '', discount_price: '',
   stock: '0', sku: '', category_id: '', brand_id: '', is_featured: false, is_new: false, is_best_seller: false,
+  color: '', memory: '',
 };
 
 const AdminProducts = () => {
