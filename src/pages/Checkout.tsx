@@ -381,16 +381,21 @@ const Checkout = () => {
                   <CardContent className="p-6">
                     <h3 className="font-display font-semibold mb-4">Order Items</h3>
                     <div className="space-y-3">
-                      {items.map(item => (
-                        <div key={item.product.id} className="flex items-center gap-3">
-                          <img src={item.product.images[0]} alt="" className="w-12 h-12 rounded-lg object-cover" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium line-clamp-1">{item.product.name}</p>
-                            <p className="text-xs text-muted-foreground">Qty: {item.quantity}</p>
+                      {items.map(item => {
+                        const price = item.variant ? (item.variant.discountPrice ?? item.variant.price) : (item.product.discountPrice ?? item.product.price);
+                        const image = item.variant?.images[0] || item.product.images[0];
+                        const label = item.variant ? [item.variant.color, item.variant.storage].filter(Boolean).join(' · ') : '';
+                        return (
+                          <div key={item.id} className="flex items-center gap-3">
+                            <img src={image} alt="" className="w-12 h-12 rounded-lg object-cover" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium line-clamp-1">{item.product.name}</p>
+                              <p className="text-xs text-muted-foreground">{label ? `${label} • ` : ''}Qty: {item.quantity}</p>
+                            </div>
+                            <span className="text-sm font-semibold">${(price * item.quantity).toFixed(2)}</span>
                           </div>
-                          <span className="text-sm font-semibold">${((item.product.discountPrice ?? item.product.price) * item.quantity).toFixed(2)}</span>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </CardContent>
                 </Card>
@@ -412,12 +417,15 @@ const Checkout = () => {
               <CardContent className="p-6">
                 <h3 className="font-display font-semibold text-lg mb-4">Order Summary</h3>
                 <div className="space-y-3 mb-4">
-                  {items.map(item => (
-                    <div key={item.product.id} className="flex justify-between text-sm">
-                      <span className="text-muted-foreground line-clamp-1 flex-1 mr-2">{item.product.name} × {item.quantity}</span>
-                      <span>${((item.product.discountPrice ?? item.product.price) * item.quantity).toFixed(2)}</span>
-                    </div>
-                  ))}
+                  {items.map(item => {
+                    const price = item.variant ? (item.variant.discountPrice ?? item.variant.price) : (item.product.discountPrice ?? item.product.price);
+                    return (
+                      <div key={item.id} className="flex justify-between text-sm">
+                        <span className="text-muted-foreground line-clamp-1 flex-1 mr-2">{item.product.name} × {item.quantity}</span>
+                        <span>${(price * item.quantity).toFixed(2)}</span>
+                      </div>
+                    );
+                  })}
                 </div>
                 <Separator className="my-4" />
                 <div className="space-y-2 text-sm">
