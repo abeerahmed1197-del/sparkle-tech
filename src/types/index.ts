@@ -20,6 +20,20 @@ export interface Product {
   createdAt: string;
 }
 
+export interface ProductVariant {
+  id: string;
+  productId: string;
+  color: string | null;
+  colorHex: string | null;
+  storage: string | null;
+  price: number;
+  discountPrice: number | null;
+  stock: number;
+  sku: string | null;
+  sortOrder: number;
+  images: string[];
+}
+
 export interface Category {
   id: string;
   name: string;
@@ -27,6 +41,7 @@ export interface Category {
   icon: string;
   image: string;
   productCount: number;
+  parentId?: string | null;
 }
 
 export interface Brand {
@@ -37,7 +52,9 @@ export interface Brand {
 }
 
 export interface CartItem {
+  id: string; // composite: `${productId}::${variantId ?? ''}`
   product: Product;
+  variant?: ProductVariant | null;
   quantity: number;
 }
 
@@ -69,6 +86,10 @@ export interface OrderItem {
   productImage: string;
   quantity: number;
   price: number;
+  variantId?: string | null;
+  variantLabel?: string | null;
+  variantColor?: string | null;
+  variantStorage?: string | null;
 }
 
 export interface Review {
@@ -109,3 +130,16 @@ export interface ShippingMethod {
   price: number;
   estimatedDays: string;
 }
+
+export const variantLabel = (v?: ProductVariant | null) => {
+  if (!v) return '';
+  return [v.color, v.storage].filter(Boolean).join(' · ');
+};
+
+export const cartLineId = (productId: string, variantId?: string | null) =>
+  `${productId}::${variantId ?? ''}`;
+
+export const effectivePrice = (product: Product, variant?: ProductVariant | null) => {
+  if (variant) return variant.discountPrice ?? variant.price;
+  return product.discountPrice ?? product.price;
+};

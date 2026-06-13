@@ -21,7 +21,7 @@ const CategoryCard = ({ category }: CategoryCardProps) => {
 
   return (
     <Link
-      to={`/shop?category=${category.slug}`}
+      to={`/c/${category.slug}`}
       className="group flex flex-col items-center gap-3 p-5 md:p-6 rounded-2xl bg-card border border-border/50 hover:border-primary/30 hover:shadow-card-hover transition-all duration-500 hover:-translate-y-1"
     >
       <div className="p-3 md:p-4 rounded-2xl bg-primary/5 group-hover:bg-primary/10 group-hover:glow transition-all duration-500">

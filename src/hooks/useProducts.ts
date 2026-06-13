@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import type { ProductVariant } from '@/types';
 
 export interface ProductWithImages {
   id: string;
@@ -24,8 +25,41 @@ export interface ProductWithImages {
   updated_at: string;
   product_images: { id: string; url: string; sort_order: number }[];
   brands: { id: string; name: string; slug: string; logo: string | null } | null;
-  categories: { id: string; name: string; slug: string; icon: string | null; image: string | null } | null;
+  categories: { id: string; name: string; slug: string; icon: string | null; image: string | null; parent_id?: string | null } | null;
+  product_variants?: RawVariant[];
 }
+
+interface RawVariant {
+  id: string;
+  product_id: string;
+  color: string | null;
+  color_hex: string | null;
+  storage: string | null;
+  price: number;
+  discount_price: number | null;
+  stock: number;
+  sku: string | null;
+  sort_order: number;
+  product_variant_images?: { id: string; url: string; sort_order: number }[];
+}
+
+export const mapVariant = (v: RawVariant): ProductVariant => ({
+  id: v.id,
+  productId: v.product_id,
+  color: v.color,
+  colorHex: v.color_hex,
+  storage: v.storage,
+  price: Number(v.price),
+  discountPrice: v.discount_price !== null ? Number(v.discount_price) : null,
+  stock: v.stock,
+  sku: v.sku,
+  sortOrder: v.sort_order,
+  images:
+    (v.product_variant_images ?? [])
+      .slice()
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((i) => i.url),
+});
 
 export const useProducts = (filters?: {
   categorySlug?: string;
@@ -45,7 +79,7 @@ export const useProducts = (filters?: {
           *,
           product_images(id, url, sort_order),
           brands(id, name, slug, logo),
-          categories(id, name, slug, icon, image)
+          categories(id, name, slug, icon, image, parent_id)
         `)
         .eq('is_active', true)
         .order('created_at', { ascending: false });
@@ -78,7 +112,7 @@ export const useAllProducts = () => {
           *,
           product_images(id, url, sort_order),
           brands(id, name, slug, logo),
-          categories(id, name, slug, icon, image)
+          categories(id, name, slug, icon, image, parent_id)
         `)
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -91,18 +125,19 @@ export const useProduct = (slug: string) => {
   return useQuery({
     queryKey: ['product', slug],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('products')
         .select(`
           *,
           product_images(id, url, sort_order),
           brands(id, name, slug, logo),
-          categories(id, name, slug, icon, image)
+          categories(id, name, slug, icon, image, parent_id),
+          product_variants(*, product_variant_images(id, url, sort_order))
         `)
         .eq('slug', slug)
         .single();
       if (error) throw error;
-      return data as unknown as ProductWithImages;
+      return data as ProductWithImages;
     },
     enabled: !!slug,
   });
@@ -112,9 +147,44 @@ export const useCategories = () => {
   return useQuery({
     queryKey: ['categories'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('categories').select('*').order('name');
+      const { data, error } = await (supabase as any).from('categories').select('*').order('sort_order').order('name');
       if (error) throw error;
-      return data;
+      return data as any[];
+    },
+  });
+};
+
+export interface CategoryNode {
+  id: string;
+  name: string;
+  slug: string;
+  icon: string | null;
+  image: string | null;
+  parent_id: string | null;
+  product_count: number | null;
+  children: CategoryNode[];
+}
+
+export const useCategoryTree = () => {
+  return useQuery({
+    queryKey: ['category-tree'],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).from('categories').select('*').order('sort_order').order('name');
+      if (error) throw error;
+      const all = (data as any[]) || [];
+      const byId = new Map<string, CategoryNode>();
+      all.forEach(c => byId.set(c.id, { ...c, children: [] }));
+      const roots: CategoryNode[] = [];
+      byId.forEach(node => {
+        if (node.parent_id) {
+          const parent = byId.get(node.parent_id);
+          if (parent) parent.children.push(node);
+          else roots.push(node);
+        } else {
+          roots.push(node);
+        }
+      });
+      return roots;
     },
   });
 };

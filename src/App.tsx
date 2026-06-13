@@ -18,6 +18,7 @@ import OrderSuccess from "./pages/OrderSuccess";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Categories from "./pages/Categories";
+import CategoryPage from "./pages/CategoryPage";
 import Brands from "./pages/Brands";
 import Blog from "./pages/Blog";
 import BlogPost from "./pages/BlogPost";
@@ -56,6 +57,8 @@ const App = () => (
                   <Route path="/auth" element={<Auth />} />
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/categories" element={<Categories />} />
+                  <Route path="/c/:parentSlug" element={<CategoryPage />} />
+                  <Route path="/c/:parentSlug/:childSlug" element={<CategoryPage />} />
                   <Route path="/brands" element={<Brands />} />
                   <Route path="/blog" element={<Blog />} />
                   <Route path="/blog/:slug" element={<BlogPost />} />

@@ -51,30 +51,53 @@ Deno.serve(async (req) => {
     }
 
     // ----- SERVER-SIDE PRICE RECALCULATION -----
-    const productIds = (order.order_items as any[])
-      .map((i) => i.product_id)
-      .filter(Boolean);
+    const items = order.order_items as any[];
+    const productIds = items.map((i) => i.product_id).filter(Boolean);
+    const variantIds = items.map((i) => i.variant_id).filter(Boolean);
+
     const { data: products, error: prodErr } = await supabase
       .from('products')
       .select('id, name, price, discount_price, is_active, stock')
       .in('id', productIds);
     if (prodErr) return jsonResponse({ error: 'Failed to load products' }, 500);
-
     const productMap = new Map(products!.map((p) => [p.id, p]));
+
+    let variantMap = new Map<string, any>();
+    if (variantIds.length > 0) {
+      const { data: variants } = await (supabase as any)
+        .from('product_variants')
+        .select('id, product_id, color, storage, price, discount_price, stock')
+        .in('id', variantIds);
+      variantMap = new Map((variants || []).map((v: any) => [v.id, v]));
+    }
+
     let subtotal = 0;
     const verifiedItems: { name: string; image: string | null; unitAmount: number; quantity: number }[] = [];
-    for (const item of order.order_items as any[]) {
+    for (const item of items) {
       const p = productMap.get(item.product_id);
       if (!p || !p.is_active) {
         return jsonResponse({ error: `Product unavailable: ${item.product_name}` }, 400);
       }
-      if (item.quantity <= 0 || item.quantity > Math.max(p.stock ?? 0, 1) + 1000) {
+
+      let unitPrice = Number(p.discount_price ?? p.price);
+      let displayName = p.name;
+
+      if (item.variant_id) {
+        const v = variantMap.get(item.variant_id);
+        if (!v || v.product_id !== p.id) {
+          return jsonResponse({ error: `Variant unavailable for ${p.name}` }, 400);
+        }
+        unitPrice = Number(v.discount_price ?? v.price);
+        const label = [v.color, v.storage].filter(Boolean).join(' · ');
+        if (label) displayName = `${p.name} — ${label}`;
+      }
+
+      if (item.quantity <= 0) {
         return jsonResponse({ error: 'Invalid quantity' }, 400);
       }
-      const unitPrice = Number(p.discount_price ?? p.price);
       subtotal += unitPrice * item.quantity;
       verifiedItems.push({
-        name: p.name,
+        name: displayName,
         image: item.product_image || null,
         unitAmount: Math.round(unitPrice * 100),
         quantity: item.quantity,
