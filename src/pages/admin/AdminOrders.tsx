@@ -117,6 +117,7 @@ const AdminOrders = () => {
                       {item.product_image && <img src={item.product_image} alt="" className="w-10 h-10 rounded-lg object-cover" />}
                       <div className="flex-1">
                         <p className="text-sm font-medium">{item.product_name}</p>
+                        {item.variant_label && <p className="text-xs text-primary">{item.variant_label}</p>}
                         <p className="text-xs text-muted-foreground">Qty: {item.quantity} × ${item.price}</p>
                       </div>
                     </div>

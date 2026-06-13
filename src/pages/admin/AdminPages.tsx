@@ -19,10 +19,19 @@ export const AdminCategories = () => {
   const queryClient = useQueryClient();
   const [showDialog, setShowDialog] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: '', slug: '', icon: '', image: '' });
+  const [form, setForm] = useState({ name: '', slug: '', icon: '', image: '', parent_id: '' });
+
+  const parents = (categories || []).filter((c: any) => !c.parent_id);
+  const childrenOf = (pid: string) => (categories || []).filter((c: any) => c.parent_id === pid);
 
   const handleSave = async () => {
-    const data = { name: form.name, slug: form.slug || form.name.toLowerCase().replace(/\s+/g, '-'), icon: form.icon || null, image: form.image || null };
+    const data: any = {
+      name: form.name,
+      slug: form.slug || form.name.toLowerCase().replace(/\s+/g, '-'),
+      icon: form.icon || null,
+      image: form.image || null,
+      parent_id: form.parent_id || null,
+    };
     if (editId) {
       const { error } = await supabase.from('categories').update(data).eq('id', editId);
       if (error) { toast.error('Failed to update'); return; }
@@ -32,6 +41,7 @@ export const AdminCategories = () => {
     }
     toast.success(editId ? 'Category updated' : 'Category created');
     queryClient.invalidateQueries({ queryKey: ['categories'] });
+    queryClient.invalidateQueries({ queryKey: ['category-tree'] });
     setShowDialog(false);
   };
 
@@ -39,37 +49,50 @@ export const AdminCategories = () => {
     await supabase.from('categories').delete().eq('id', id);
     toast.success('Category deleted');
     queryClient.invalidateQueries({ queryKey: ['categories'] });
+    queryClient.invalidateQueries({ queryKey: ['category-tree'] });
   };
 
-  const openEdit = (cat: any) => { setEditId(cat.id); setForm({ name: cat.name, slug: cat.slug, icon: cat.icon || '', image: cat.image || '' }); setShowDialog(true); };
-  const openAdd = () => { setEditId(null); setForm({ name: '', slug: '', icon: '', image: '' }); setShowDialog(true); };
+  const openEdit = (cat: any) => { setEditId(cat.id); setForm({ name: cat.name, slug: cat.slug, icon: cat.icon || '', image: cat.image || '', parent_id: cat.parent_id || '' }); setShowDialog(true); };
+  const openAdd = (parentId = '') => { setEditId(null); setForm({ name: '', slug: '', icon: '', image: '', parent_id: parentId }); setShowDialog(true); };
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="font-display text-2xl font-bold">Categories</h1>
-        <Button onClick={openAdd}><Plus className="h-4 w-4 mr-2" />Add Category</Button>
+        <Button onClick={() => openAdd()}><Plus className="h-4 w-4 mr-2" />Add Category</Button>
       </div>
       <Card className="border-0 shadow-card">
-        <CardContent className="p-0">
+        <CardContent className="p-4">
           {isLoading ? <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div> : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead><tr className="border-b bg-secondary/50"><th className="text-left py-3 px-4 font-medium text-muted-foreground">Name</th><th className="text-left py-3 px-4 font-medium text-muted-foreground">Slug</th><th className="text-left py-3 px-4 font-medium text-muted-foreground">Products</th><th className="text-right py-3 px-4 font-medium text-muted-foreground">Actions</th></tr></thead>
-                <tbody>
-                  {categories?.map(cat => (
-                    <tr key={cat.id} className="border-b last:border-0 hover:bg-secondary/30">
-                      <td className="py-3 px-4 font-medium">{cat.name}</td>
-                      <td className="py-3 px-4 text-muted-foreground">{cat.slug}</td>
-                      <td className="py-3 px-4">{cat.product_count}</td>
-                      <td className="py-3 px-4 text-right"><div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(cat)}><Pencil className="h-3 w-3" /></Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(cat.id)}><Trash2 className="h-3 w-3" /></Button>
-                      </div></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="space-y-3">
+              {parents.map((cat: any) => (
+                <div key={cat.id} className="rounded-lg border bg-card">
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <div>
+                      <p className="font-medium">{cat.name}</p>
+                      <p className="text-xs text-muted-foreground">/{cat.slug}</p>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => openAdd(cat.id)}><Plus className="h-3 w-3 mr-1" />Sub</Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(cat)}><Pencil className="h-3 w-3" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(cat.id)}><Trash2 className="h-3 w-3" /></Button>
+                    </div>
+                  </div>
+                  {childrenOf(cat.id).length > 0 && (
+                    <div className="border-t bg-secondary/30 px-4 py-2 space-y-1">
+                      {childrenOf(cat.id).map((sub: any) => (
+                        <div key={sub.id} className="flex items-center justify-between text-sm py-1">
+                          <span>↳ {sub.name} <span className="text-muted-foreground">/{sub.slug}</span></span>
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(sub)}><Pencil className="h-3 w-3" /></Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(sub.id)}><Trash2 className="h-3 w-3" /></Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </CardContent>
@@ -78,9 +101,16 @@ export const AdminCategories = () => {
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent><DialogHeader><DialogTitle>{editId ? 'Edit' : 'Add'} Category</DialogTitle></DialogHeader>
           <div className="space-y-3">
+            <div>
+              <Label>Parent (optional)</Label>
+              <select className="mt-1 w-full h-10 rounded-md border border-input bg-background px-3 text-sm" value={form.parent_id} onChange={e => setForm(p => ({ ...p, parent_id: e.target.value }))}>
+                <option value="">— Top-level —</option>
+                {parents.filter((c: any) => c.id !== editId).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
             <div><Label>Name</Label><Input className="mt-1" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value, slug: e.target.value.toLowerCase().replace(/\s+/g, '-') }))} /></div>
             <div><Label>Slug</Label><Input className="mt-1" value={form.slug} onChange={e => setForm(p => ({ ...p, slug: e.target.value }))} /></div>
-            <div><Label>Icon (emoji or text)</Label><Input className="mt-1" value={form.icon} onChange={e => setForm(p => ({ ...p, icon: e.target.value }))} /></div>
+            <div><Label>Icon (lucide name, e.g. Smartphone)</Label><Input className="mt-1" value={form.icon} onChange={e => setForm(p => ({ ...p, icon: e.target.value }))} /></div>
             <div><Label>Image URL</Label><Input className="mt-1" value={form.image} onChange={e => setForm(p => ({ ...p, image: e.target.value }))} /></div>
           </div>
           <Button className="mt-4 w-full" onClick={handleSave} disabled={!form.name}>{editId ? 'Update' : 'Create'}</Button>
