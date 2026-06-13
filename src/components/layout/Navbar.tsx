@@ -14,7 +14,7 @@ import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
-import { useCategories, useUserRoles } from '@/hooks/useProducts';
+import { useCategoryTree, useUserRoles } from '@/hooks/useProducts';
 import { useState, useEffect, useRef } from 'react';
 import SearchCommand from '@/components/layout/SearchCommand';
 import gsap from 'gsap';
@@ -33,7 +33,7 @@ const Navbar = () => {
   const { items: wishlistItems } = useWishlist();
   const { user, signOut } = useAuth();
   const { theme, setTheme, resolvedTheme } = useTheme();
-  const { data: categories } = useCategories();
+  const { data: categoryTree } = useCategoryTree();
   const { data: roles } = useUserRoles();
   const isAdmin = roles?.some(r => r.role === 'admin');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -88,10 +88,17 @@ const Navbar = () => {
                   ))}
                   <div className="border-t mt-4 pt-4">
                     <p className="text-sm font-semibold text-muted-foreground mb-2 px-4">Categories</p>
-                    {categories?.slice(0, 8).map(cat => (
-                      <Link key={cat.id} to={`/shop?category=${cat.slug}`} className="py-2 px-4 text-sm rounded-lg hover:bg-secondary block transition-colors">
-                        {cat.name}
-                      </Link>
+                    {categoryTree?.map(cat => (
+                      <div key={cat.id} className="mb-2">
+                        <Link to={`/c/${cat.slug}`} className="py-2 px-4 text-sm font-medium rounded-lg hover:bg-secondary block transition-colors">
+                          {cat.name}
+                        </Link>
+                        {cat.children.map(child => (
+                          <Link key={child.id} to={`/c/${cat.slug}/${child.slug}`} className="py-1.5 pl-8 pr-4 text-xs text-muted-foreground rounded-lg hover:bg-secondary block transition-colors">
+                            {child.name}
+                          </Link>
+                        ))}
+                      </div>
                     ))}
                   </div>
                 </nav>
