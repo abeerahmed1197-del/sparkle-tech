@@ -172,14 +172,7 @@ const Checkout = () => {
       const { error: itemsErr } = await supabase.from('order_items').insert(orderItems);
       if (itemsErr) throw itemsErr;
 
-      // Update coupon usage
-      if (appliedCoupon) {
-        supabase
-          .from('coupons')
-          .update({ used_count: 1 })
-          .eq('code', appliedCoupon)
-          .then(() => {});
-      }
+      // Coupon usage is incremented server-side after successful payment.
 
       // Try Stripe checkout
       try {
