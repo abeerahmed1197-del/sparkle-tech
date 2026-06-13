@@ -159,15 +159,25 @@ const Checkout = () => {
         .single();
       if (orderErr) throw orderErr;
 
-      // Create order items
-      const orderItems = items.map(item => ({
-        order_id: order.id,
-        product_id: item.product.id,
-        product_name: item.product.name,
-        product_image: item.product.images[0] || null,
-        price: item.product.discountPrice ?? item.product.price,
-        quantity: item.quantity,
-      }));
+      // Create order items (snapshot variant info)
+      const orderItems = items.map(item => {
+        const v = item.variant;
+        const price = v ? (v.discountPrice ?? v.price) : (item.product.discountPrice ?? item.product.price);
+        const image = v?.images[0] || item.product.images[0] || null;
+        const label = v ? [v.color, v.storage].filter(Boolean).join(' · ') : null;
+        return {
+          order_id: order.id,
+          product_id: item.product.id,
+          product_name: item.product.name,
+          product_image: image,
+          price,
+          quantity: item.quantity,
+          variant_id: v?.id ?? null,
+          variant_label: label,
+          variant_color: v?.color ?? null,
+          variant_storage: v?.storage ?? null,
+        };
+      });
 
       const { error: itemsErr } = await supabase.from('order_items').insert(orderItems);
       if (itemsErr) throw itemsErr;
