@@ -1,20 +1,16 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { Product } from '@/types';
+import { Product, ProductVariant, CartItem, cartLineId, effectivePrice } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
+import { mapVariant } from '@/hooks/useProducts';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
 
-interface CartItem {
-  product: Product;
-  quantity: number;
-}
-
 interface CartContextType {
   items: CartItem[];
-  addToCart: (product: Product, quantity?: number) => void;
-  removeFromCart: (productId: string) => void;
-  updateQuantity: (productId: string, quantity: number) => void;
-  clearCart: () => void;
+  addToCart: (product: Product, quantity?: number, variant?: ProductVariant | null) => void;
+  removeFromCart: (lineId: string) => void;
+  updateQuantity: (lineId: string, quantity: number) => void;
+  clearCart: () => Promise<void>;
   totalItems: number;
   subtotal: number;
   loading: boolean;
@@ -22,7 +18,7 @@ interface CartContextType {
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
-const GUEST_CART_KEY = 'emobiles_guest_cart';
+const GUEST_CART_KEY = 'emobiles_guest_cart_v2';
 
 const saveGuestCart = (items: CartItem[]) => {
   localStorage.setItem(GUEST_CART_KEY, JSON.stringify(items));
@@ -35,38 +31,61 @@ const loadGuestCart = (): CartItem[] => {
   } catch { return []; }
 };
 
+const productFromRow = (p: any): Product => ({
+  id: p.id,
+  name: p.name,
+  slug: p.slug,
+  description: p.description || '',
+  shortDescription: p.short_description || '',
+  price: Number(p.price),
+  discountPrice: p.discount_price !== null && p.discount_price !== undefined ? Number(p.discount_price) : undefined,
+  stock: p.stock,
+  sku: p.sku || '',
+  brandId: p.brand_id || '',
+  categoryId: p.category_id || '',
+  images: p.product_images?.map((i: any) => i.url) || [],
+  specifications: p.specifications || {},
+  rating: p.rating,
+  reviewCount: p.review_count,
+  isFeatured: p.is_featured,
+  isNew: p.is_new,
+  isBestSeller: p.is_best_seller,
+  createdAt: p.created_at,
+});
+
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [items, setItems] = useState<CartItem[]>(loadGuestCart);
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
   const prevUserId = useRef<string | null>(null);
 
-  // Fetch cart from DB when user logs in + merge guest cart
   useEffect(() => {
     if (user && prevUserId.current !== user.id) {
       prevUserId.current = user.id;
       (async () => {
         setLoading(true);
-        const { data: dbItems } = await supabase
+        const { data: dbItems } = await (supabase as any)
           .from('cart_items')
-          .select('product_id, quantity')
+          .select('product_id, variant_id, quantity')
           .eq('user_id', user.id);
 
         const guestItems = loadGuestCart();
-
-        if (guestItems.length > 0 && dbItems) {
-          // Merge guest cart into DB
+        if (guestItems.length > 0) {
           for (const gi of guestItems) {
-            const existing = dbItems.find(d => d.product_id === gi.product.id);
+            const existing = (dbItems || []).find(
+              (d: any) => d.product_id === gi.product.id && (d.variant_id || null) === (gi.variant?.id || null),
+            );
             if (existing) {
-              await supabase.from('cart_items')
+              await (supabase as any).from('cart_items')
                 .update({ quantity: existing.quantity + gi.quantity })
                 .eq('user_id', user.id)
-                .eq('product_id', gi.product.id);
+                .eq('product_id', gi.product.id)
+                .eq('variant_id', gi.variant?.id ?? null);
             } else {
-              await supabase.from('cart_items').insert({
+              await (supabase as any).from('cart_items').insert({
                 user_id: user.id,
                 product_id: gi.product.id,
+                variant_id: gi.variant?.id ?? null,
                 quantity: gi.quantity,
               });
             }
@@ -74,39 +93,28 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           localStorage.removeItem(GUEST_CART_KEY);
         }
 
-        // Now fetch full cart with product details
-        const { data: fullCart } = await supabase
+        const { data: fullCart } = await (supabase as any)
           .from('cart_items')
-          .select('product_id, quantity, products(*, product_images(id, url, sort_order))')
+          .select(`
+            product_id, variant_id, quantity,
+            products(*, product_images(id, url, sort_order)),
+            product_variants(*, product_variant_images(id, url, sort_order))
+          `)
           .eq('user_id', user.id);
 
         if (fullCart) {
-          const mapped: CartItem[] = fullCart
-            .filter((ci: any) => ci.products)
-            .map((ci: any) => ({
-              product: {
-                id: ci.products.id,
-                name: ci.products.name,
-                slug: ci.products.slug,
-                description: ci.products.description || '',
-                shortDescription: ci.products.short_description || '',
-                price: ci.products.price,
-                discountPrice: ci.products.discount_price ?? undefined,
-                stock: ci.products.stock,
-                sku: ci.products.sku || '',
-                brandId: ci.products.brand_id || '',
-                categoryId: ci.products.category_id || '',
-                images: ci.products.product_images?.map((i: any) => i.url) || [],
-                specifications: ci.products.specifications || {},
-                rating: ci.products.rating,
-                reviewCount: ci.products.review_count,
-                isFeatured: ci.products.is_featured,
-                isNew: ci.products.is_new,
-                isBestSeller: ci.products.is_best_seller,
-                createdAt: ci.products.created_at,
-              },
-              quantity: ci.quantity,
-            }));
+          const mapped: CartItem[] = (fullCart as any[])
+            .filter(ci => ci.products)
+            .map(ci => {
+              const variant = ci.product_variants ? mapVariant(ci.product_variants) : null;
+              const product = productFromRow(ci.products);
+              return {
+                id: cartLineId(product.id, variant?.id),
+                product,
+                variant,
+                quantity: ci.quantity,
+              };
+            });
           setItems(mapped);
         }
         setLoading(false);
@@ -117,38 +125,38 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [user]);
 
-  const syncToDb = useCallback(async (productId: string, quantity: number) => {
+  const syncToDb = useCallback(async (productId: string, variantId: string | null, quantity: number) => {
     if (!user) return;
     if (quantity <= 0) {
-      await supabase.from('cart_items').delete().eq('user_id', user.id).eq('product_id', productId);
+      let q = (supabase as any).from('cart_items').delete().eq('user_id', user.id).eq('product_id', productId);
+      q = variantId ? q.eq('variant_id', variantId) : q.is('variant_id', null);
+      await q;
+      return;
+    }
+    let lookup = (supabase as any).from('cart_items').select('id').eq('user_id', user.id).eq('product_id', productId);
+    lookup = variantId ? lookup.eq('variant_id', variantId) : lookup.is('variant_id', null);
+    const { data: existing } = await lookup.maybeSingle();
+    if (existing) {
+      await (supabase as any).from('cart_items').update({ quantity }).eq('id', existing.id);
     } else {
-      const { data: existing } = await supabase
-        .from('cart_items')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('product_id', productId)
-        .maybeSingle();
-      if (existing) {
-        await supabase.from('cart_items').update({ quantity }).eq('id', existing.id);
-      } else {
-        await supabase.from('cart_items').insert({ user_id: user.id, product_id: productId, quantity });
-      }
+      await (supabase as any).from('cart_items').insert({
+        user_id: user.id, product_id: productId, variant_id: variantId, quantity,
+      });
     }
   }, [user]);
 
-  const addToCart = useCallback((product: Product, quantity = 1) => {
+  const addToCart = useCallback((product: Product, quantity = 1, variant: ProductVariant | null = null) => {
+    const lineId = cartLineId(product.id, variant?.id);
     setItems(prev => {
-      const existing = prev.find(item => item.product.id === product.id);
+      const existing = prev.find(item => item.id === lineId);
       let newItems: CartItem[];
       if (existing) {
         const newQty = existing.quantity + quantity;
-        newItems = prev.map(item =>
-          item.product.id === product.id ? { ...item, quantity: newQty } : item
-        );
-        syncToDb(product.id, newQty);
+        newItems = prev.map(item => item.id === lineId ? { ...item, quantity: newQty } : item);
+        syncToDb(product.id, variant?.id ?? null, newQty);
       } else {
-        newItems = [...prev, { product, quantity }];
-        syncToDb(product.id, quantity);
+        newItems = [...prev, { id: lineId, product, variant, quantity }];
+        syncToDb(product.id, variant?.id ?? null, quantity);
       }
       if (!user) saveGuestCart(newItems);
       return newItems;
@@ -156,44 +164,36 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     toast.success(`${product.name} added to cart`);
   }, [user, syncToDb]);
 
-  const removeFromCart = useCallback((productId: string) => {
+  const removeFromCart = useCallback((lineId: string) => {
     setItems(prev => {
-      const newItems = prev.filter(item => item.product.id !== productId);
+      const target = prev.find(i => i.id === lineId);
+      const newItems = prev.filter(i => i.id !== lineId);
+      if (target) syncToDb(target.product.id, target.variant?.id ?? null, 0);
       if (!user) saveGuestCart(newItems);
       return newItems;
     });
-    syncToDb(productId, 0);
     toast.info('Item removed from cart');
   }, [user, syncToDb]);
 
-  const updateQuantity = useCallback((productId: string, quantity: number) => {
-    if (quantity <= 0) {
-      removeFromCart(productId);
-      return;
-    }
+  const updateQuantity = useCallback((lineId: string, quantity: number) => {
+    if (quantity <= 0) { removeFromCart(lineId); return; }
     setItems(prev => {
-      const newItems = prev.map(item =>
-        item.product.id === productId ? { ...item, quantity } : item
-      );
+      const target = prev.find(i => i.id === lineId);
+      const newItems = prev.map(i => i.id === lineId ? { ...i, quantity } : i);
+      if (target) syncToDb(target.product.id, target.variant?.id ?? null, quantity);
       if (!user) saveGuestCart(newItems);
       return newItems;
     });
-    syncToDb(productId, quantity);
   }, [removeFromCart, user, syncToDb]);
 
   const clearCart = useCallback(async () => {
     setItems([]);
-    if (user) {
-      await supabase.from('cart_items').delete().eq('user_id', user.id);
-    }
+    if (user) await (supabase as any).from('cart_items').delete().eq('user_id', user.id);
     localStorage.removeItem(GUEST_CART_KEY);
   }, [user]);
 
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
-  const subtotal = items.reduce((sum, item) => {
-    const price = item.product.discountPrice ?? item.product.price;
-    return sum + price * item.quantity;
-  }, 0);
+  const subtotal = items.reduce((sum, item) => sum + effectivePrice(item.product, item.variant) * item.quantity, 0);
 
   return (
     <CartContext.Provider value={{ items, addToCart, removeFromCart, updateQuantity, clearCart, totalItems, subtotal, loading }}>
