@@ -110,16 +110,49 @@ const Navbar = () => {
           </div>
 
           <nav className="hidden lg:flex items-center gap-1">
-            {navLinks.map(link => (
-              <Link
-                key={link.href}
-                to={link.href}
-                className="px-4 py-2 text-sm font-medium rounded-lg hover:bg-secondary transition-all duration-200 relative group"
-              >
-                {link.label}
-                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-0 h-0.5 bg-primary rounded-full group-hover:w-3/4 transition-all duration-300" />
-              </Link>
-            ))}
+            {navLinks.map(link => {
+              if (link.label === 'Categories' && categoryTree && categoryTree.length > 0) {
+                return (
+                  <div key={link.href} className="relative group">
+                    <Link
+                      to={link.href}
+                      className="px-4 py-2 text-sm font-medium rounded-lg hover:bg-secondary transition-all duration-200 relative inline-flex items-center"
+                    >
+                      {link.label}
+                      <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-0 h-0.5 bg-primary rounded-full group-hover:w-3/4 transition-all duration-300" />
+                    </Link>
+                    <div className="absolute left-1/2 -translate-x-1/2 top-full pt-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                      <div className="glass rounded-2xl border shadow-2xl p-6 w-[640px] grid grid-cols-3 gap-6">
+                        {categoryTree.slice(0, 6).map(cat => (
+                          <div key={cat.id}>
+                            <Link to={`/c/${cat.slug}`} className="font-display font-semibold text-sm mb-2 block hover:text-primary transition-colors">
+                              {cat.name}
+                            </Link>
+                            <div className="flex flex-col gap-1">
+                              {cat.children.slice(0, 6).map(child => (
+                                <Link key={child.id} to={`/c/${cat.slug}/${child.slug}`} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+                                  {child.name}
+                                </Link>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+              return (
+                <Link
+                  key={link.href}
+                  to={link.href}
+                  className="px-4 py-2 text-sm font-medium rounded-lg hover:bg-secondary transition-all duration-200 relative group"
+                >
+                  {link.label}
+                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-0 h-0.5 bg-primary rounded-full group-hover:w-3/4 transition-all duration-300" />
+                </Link>
+              );
+            })}
           </nav>
 
           <div className="flex items-center gap-1">
