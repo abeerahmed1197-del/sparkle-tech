@@ -203,8 +203,8 @@ Deno.serve(async (req) => {
     await supabase.from('orders').update({ stripe_session_id: session.id }).eq('id', orderId);
 
     return jsonResponse({ url: session.url, sessionId: session.id, total });
-  } catch (err: any) {
+  } catch (err) {
     console.error('Checkout error:', err);
-    return jsonResponse({ error: err.message }, 500);
+    return jsonResponse({ error: 'An internal error occurred. Please try again.' }, 500);
   }
 });
