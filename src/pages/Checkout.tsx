@@ -141,79 +141,55 @@ const Checkout = () => {
         addressId = newAddr.id;
       }
 
-      // Create order
-      const { data: order, error: orderErr } = await supabase
-        .from('orders')
-        .insert({
-          user_id: user.id,
-          subtotal,
-          shipping_cost: shippingCost,
-          discount: couponDiscount,
-          total,
-          status: 'pending',
+      if (!addressId) throw new Error('Shipping address required');
+
+      // Create order server-side (authoritative pricing, no client-controlled totals)
+      const { data: orderResp, error: placeErr } = await supabase.functions.invoke('place-order', {
+        body: {
+          items: items.map((item) => ({
+            product_id: item.product.id,
+            variant_id: item.variant?.id ?? null,
+            quantity: item.quantity,
+          })),
           shipping_address_id: addressId,
           shipping_method_id: shippingMethodId || null,
           coupon_code: appliedCoupon,
-        })
-        .select()
-        .single();
-      if (orderErr) throw orderErr;
-
-      // Create order items (snapshot variant info)
-      const orderItems = items.map(item => {
-        const v = item.variant;
-        const price = v ? (v.discountPrice ?? v.price) : (item.product.discountPrice ?? item.product.price);
-        const image = v?.images[0] || item.product.images[0] || null;
-        const label = v ? [v.color, v.storage].filter(Boolean).join(' · ') : null;
-        return {
-          order_id: order.id,
-          product_id: item.product.id,
-          product_name: item.product.name,
-          product_image: image,
-          price,
-          quantity: item.quantity,
-          variant_id: v?.id ?? null,
-          variant_label: label,
-          variant_color: v?.color ?? null,
-          variant_storage: v?.storage ?? null,
-        };
+        },
       });
-
-      const { error: itemsErr } = await supabase.from('order_items').insert(orderItems);
-      if (itemsErr) throw itemsErr;
-
-      // Coupon usage is incremented server-side after successful payment.
+      if (placeErr || !orderResp?.order_id) {
+        throw new Error(orderResp?.error || 'Failed to place order');
+      }
+      const orderId: string = orderResp.order_id;
 
       // Try Stripe checkout
       try {
         const { data: stripeData, error: stripeError } = await supabase.functions.invoke('create-checkout', {
           body: {
-            orderId: order.id,
-            successUrl: `${window.location.origin}/order-success?order=${order.id}`,
+            orderId,
+            successUrl: `${window.location.origin}/order-success?order=${orderId}`,
             cancelUrl: `${window.location.origin}/checkout`,
           },
         });
 
         if (!stripeError && stripeData?.url) {
-          // Redirect to Stripe
           await clearCart();
           window.location.href = stripeData.url;
           return;
         }
       } catch {
-        // Stripe not configured — fall back to direct order
         console.log('Stripe not configured, placing order directly');
       }
 
-      // Fallback: mark as placed without payment
+      // Fallback: order was created server-side with verified totals; leave as pending
       await clearCart();
       toast.success('Order placed successfully!');
-      navigate('/order-success?order=' + order.id);
+      navigate('/order-success?order=' + orderId);
     } catch (err: any) {
       toast.error(err.message || 'Failed to place order');
     }
     setPlacing(false);
   };
+
 
   if (items.length === 0) {
     return (
