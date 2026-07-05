@@ -90,8 +90,8 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ received: true }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-  } catch (err: any) {
+  } catch (err) {
     console.error('Webhook error:', err);
-    return new Response(`Webhook Error: ${err.message}`, { status: 400 });
+    return new Response('Webhook processing failed', { status: 400 });
   }
 });
