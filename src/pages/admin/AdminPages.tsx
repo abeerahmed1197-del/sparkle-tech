@@ -9,6 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Plus, Pencil, Trash2, Loader2 } from 'lucide-react';
 import { useCategories, useBrands, useAllBlogPosts, useCoupons } from '@/hooks/useProducts';
+import { useHeroSettings, useUpdateSiteSetting, type HeroSettings } from '@/hooks/useSiteSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -437,8 +438,8 @@ export const AdminSettings = () => {
   return (
     <div>
       <h1 className="font-display text-2xl font-bold mb-6">Settings</h1>
-      <div className="flex gap-2 mb-6">
-        {['general', 'payments'].map(tab => (
+      <div className="flex gap-2 mb-6 flex-wrap">
+        {['general', 'homepage', 'payments'].map(tab => (
           <Button key={tab} variant={activeTab === tab ? 'default' : 'outline'} size="sm" onClick={() => setActiveTab(tab)} className="capitalize">{tab}</Button>
         ))}
       </div>
@@ -454,6 +455,8 @@ export const AdminSettings = () => {
         </Card>
       )}
 
+      {activeTab === 'homepage' && <HeroSettingsEditor />}
+
       {activeTab === 'payments' && (
         <div className="space-y-6">
           <Card className="border-0 shadow-card">
@@ -461,32 +464,107 @@ export const AdminSettings = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-display font-semibold text-lg">Stripe Payments</h3>
-                  <p className="text-sm text-muted-foreground mt-1">Accept credit card payments via Stripe. Payments go directly to your Stripe account.</p>
+                  <p className="text-sm text-muted-foreground mt-1">Accept credit card payments via Stripe.</p>
                 </div>
                 <Badge variant="outline" className="text-muted-foreground">Not configured</Badge>
               </div>
               <div className="space-y-4">
                 <div><Label>Publishable Key</Label><Input className="mt-1 font-mono text-xs" placeholder="pk_live_..." /></div>
-                <div><Label>Secret Key</Label><Input className="mt-1 font-mono text-xs" type="password" placeholder="sk_live_..." /><p className="text-xs text-muted-foreground mt-1">Stored securely as an environment secret.</p></div>
+                <div><Label>Secret Key</Label><Input className="mt-1 font-mono text-xs" type="password" placeholder="sk_live_..." /></div>
                 <div><Label>Webhook Secret</Label><Input className="mt-1 font-mono text-xs" type="password" placeholder="whsec_..." /></div>
-                <div className="flex items-center gap-3 pt-2"><input type="checkbox" id="stripe-enabled" className="rounded border-input" /><label htmlFor="stripe-enabled" className="text-sm font-medium">Enable Stripe payments</label></div>
               </div>
               <Button>Save Payment Settings</Button>
-            </CardContent>
-          </Card>
-          <Card className="border-0 shadow-card">
-            <CardContent className="p-6">
-              <h3 className="font-display font-semibold mb-2">How it works</h3>
-              <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
-                <li>Create a <a href="https://dashboard.stripe.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">Stripe account</a>.</li>
-                <li>Copy API keys from Stripe Dashboard → Developers → API keys.</li>
-                <li>Set up a webhook and paste the signing secret above.</li>
-                <li>Enable payments and go live.</li>
-              </ol>
             </CardContent>
           </Card>
         </div>
       )}
     </div>
+  );
+};
+
+// Hero settings editor
+const HeroSettingsEditor = () => {
+  const { data: hero } = useHeroSettings();
+  const update = useUpdateSiteSetting('hero');
+  const [form, setForm] = useState<HeroSettings | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  useEffect(() => { if (hero && !form) setForm(hero); }, [hero, form]);
+  if (!form) return <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
+
+  const handleUpload = async (file: File) => {
+    setUploading(true);
+    const ext = file.name.split('.').pop() || 'jpg';
+    const path = `hero/${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from('product-images').upload(path, file, { upsert: true });
+    if (error) { toast.error(`Upload failed: ${error.message}`); setUploading(false); return; }
+    const url = supabase.storage.from('product-images').getPublicUrl(path).data.publicUrl;
+    setForm(p => p ? { ...p, image_url: url } : p);
+    setUploading(false);
+  };
+
+  const save = async () => {
+    try {
+      await update.mutateAsync(form);
+      toast.success('Homepage hero updated');
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to save');
+    }
+  };
+
+  return (
+    <Card className="border-0 shadow-card">
+      <CardContent className="p-6 space-y-5">
+        <div>
+          <h3 className="font-display font-semibold text-lg">Hero Section</h3>
+          <p className="text-sm text-muted-foreground mt-1">Controls the top banner on the homepage.</p>
+        </div>
+
+        <div>
+          <Label>Hero Image</Label>
+          <div className="mt-2 flex items-start gap-4">
+            <div className="w-48 h-28 rounded-lg overflow-hidden border bg-secondary">
+              {form.image_url && <img src={form.image_url} alt="" className="w-full h-full object-cover" />}
+            </div>
+            <div className="flex-1 space-y-2">
+              <Input value={form.image_url} onChange={e => setForm(p => p ? { ...p, image_url: e.target.value } : p)} placeholder="https://... or upload below" />
+              <label className="inline-flex items-center gap-2 px-3 py-2 rounded-md border cursor-pointer text-sm hover:bg-secondary">
+                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                Upload new
+                <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleUpload(e.target.files[0])} />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <Label>Headline (before morphing word)</Label>
+            <Input className="mt-1" value={form.headline} onChange={e => setForm(p => p ? { ...p, headline: e.target.value } : p)} />
+          </div>
+          <div>
+            <Label>Morphing Words (comma-separated)</Label>
+            <Input className="mt-1" value={form.morph_words.join(', ')} onChange={e => setForm(p => p ? { ...p, morph_words: e.target.value.split(',').map(s => s.trim()).filter(Boolean) } : p)} />
+          </div>
+        </div>
+
+        <div>
+          <Label>Subheadline</Label>
+          <Textarea className="mt-1" rows={2} value={form.subheadline} onChange={e => setForm(p => p ? { ...p, subheadline: e.target.value } : p)} />
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-4">
+          <div><Label>Primary Button Label</Label><Input className="mt-1" value={form.primary_cta_label} onChange={e => setForm(p => p ? { ...p, primary_cta_label: e.target.value } : p)} /></div>
+          <div><Label>Primary Button Link</Label><Input className="mt-1" value={form.primary_cta_href} onChange={e => setForm(p => p ? { ...p, primary_cta_href: e.target.value } : p)} /></div>
+          <div><Label>Secondary Button Label</Label><Input className="mt-1" value={form.secondary_cta_label} onChange={e => setForm(p => p ? { ...p, secondary_cta_label: e.target.value } : p)} /></div>
+          <div><Label>Secondary Button Link</Label><Input className="mt-1" value={form.secondary_cta_href} onChange={e => setForm(p => p ? { ...p, secondary_cta_href: e.target.value } : p)} /></div>
+        </div>
+
+        <Button onClick={save} disabled={update.isPending}>
+          {update.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+          Save Homepage
+        </Button>
+      </CardContent>
+    </Card>
   );
 };
