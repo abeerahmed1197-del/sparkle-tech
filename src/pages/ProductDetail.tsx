@@ -212,7 +212,9 @@ const ProductDetail = () => {
               {product.is_new && <Badge className="bg-primary text-primary-foreground border-0">NEW</Badge>}
             </div>
             <h1 className="font-display text-2xl md:text-4xl font-bold mb-3">{product.name}</h1>
-            <p className="text-muted-foreground mb-4">{product.short_description}</p>
+            {product.short_description && (
+              <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground mb-4" dangerouslySetInnerHTML={{ __html: product.short_description }} />
+            )}
 
             <div className="flex items-center gap-2 mb-5">
               <div className="flex items-center">
@@ -333,7 +335,11 @@ const ProductDetail = () => {
             <TabsTrigger value="reviews">Reviews ({reviews?.length || 0})</TabsTrigger>
           </TabsList>
           <TabsContent value="description" className="mt-6">
-            <p className="text-muted-foreground leading-relaxed max-w-3xl">{product.description}</p>
+            {product.description ? (
+              <div className="prose dark:prose-invert max-w-3xl leading-relaxed" dangerouslySetInnerHTML={{ __html: product.description }} />
+            ) : (
+              <p className="text-muted-foreground">No description provided.</p>
+            )}
           </TabsContent>
           <TabsContent value="specs" className="mt-6">
             <div className="max-w-lg space-y-3">

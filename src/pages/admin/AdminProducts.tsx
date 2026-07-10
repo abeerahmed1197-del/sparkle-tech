@@ -435,12 +435,52 @@ const AdminProducts = () => {
             </div>
           </div>
 
-          <Button className="mt-4 w-full" onClick={handleSave} disabled={saving || !form.name || !form.price}>
-            {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            {editId ? 'Update Product' : 'Create Product'}
-          </Button>
+          <div className="mt-4 flex gap-2">
+            <Button variant="outline" className="flex-1" onClick={() => setPreviewOpen(true)} disabled={!form.name}>
+              <Eye className="h-4 w-4 mr-2" />Preview
+            </Button>
+            <Button className="flex-1" onClick={handleSave} disabled={saving || !form.name || !form.price}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              {editId ? 'Update Product' : 'Create Product'}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
+
+      <ProductPreview
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        product={{
+          name: form.name,
+          short_description: form.short_description,
+          description: form.description,
+          price: parseFloat(form.price) || 0,
+          discount_price: form.discount_price ? parseFloat(form.discount_price) : null,
+          stock: parseInt(form.stock) || 0,
+          sku: form.sku,
+          categoryName: categories?.find((c: any) => c.id === form.category_id)?.name,
+          brandName: brands?.find((b: any) => b.id === form.brand_id)?.name,
+          is_new: form.is_new,
+          is_featured: form.is_featured,
+          is_best_seller: form.is_best_seller,
+          images: [
+            ...existingImages.map(i => i.url),
+            ...imageFiles.map(f => URL.createObjectURL(f)),
+          ],
+          variants: variants.map(v => ({
+            color: v.color,
+            color_hex: v.color_hex,
+            storage: v.storage,
+            price: parseFloat(v.price) || 0,
+            discount_price: v.discount_price ? parseFloat(v.discount_price) : null,
+            stock: parseInt(v.stock) || 0,
+            images: [
+              ...v.existingImages.map(i => i.url),
+              ...v.newImages.map(f => URL.createObjectURL(f)),
+            ],
+          })),
+        }}
+      />
     </div>
   );
 };
