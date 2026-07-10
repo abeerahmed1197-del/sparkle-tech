@@ -13,7 +13,50 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
-// ========== CATEGORIES ==========
+// ========== CATEGORIES (unlimited nesting) ==========
+interface CatNode { id: string; name: string; slug: string; parent_id: string | null; icon: string | null; image: string | null; children: CatNode[]; }
+
+const buildTree = (all: any[]): CatNode[] => {
+  const byId = new Map<string, CatNode>();
+  all.forEach(c => byId.set(c.id, { ...c, children: [] }));
+  const roots: CatNode[] = [];
+  byId.forEach(n => {
+    if (n.parent_id && byId.get(n.parent_id)) byId.get(n.parent_id)!.children.push(n);
+    else roots.push(n);
+  });
+  return roots;
+};
+
+// Flat list with depth for parent select
+const flatten = (nodes: CatNode[], depth = 0): { id: string; name: string; depth: number }[] => {
+  const out: { id: string; name: string; depth: number }[] = [];
+  nodes.forEach(n => {
+    out.push({ id: n.id, name: n.name, depth });
+    out.push(...flatten(n.children, depth + 1));
+  });
+  return out;
+};
+
+const CategoryRow = ({ node, depth, onEdit, onAdd, onDelete }: { node: CatNode; depth: number; onEdit: (c: any) => void; onAdd: (pid: string) => void; onDelete: (id: string) => void }) => (
+  <div>
+    <div className="flex items-center justify-between px-4 py-2.5 hover:bg-secondary/40 rounded-lg" style={{ paddingLeft: `${16 + depth * 20}px` }}>
+      <div className="flex items-center gap-2">
+        {depth > 0 && <span className="text-muted-foreground">↳</span>}
+        <div>
+          <p className="font-medium text-sm">{node.name}</p>
+          <p className="text-xs text-muted-foreground">/{node.slug}</p>
+        </div>
+      </div>
+      <div className="flex gap-1">
+        <Button variant="ghost" size="sm" onClick={() => onAdd(node.id)}><Plus className="h-3 w-3 mr-1" />Sub</Button>
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onEdit(node)}><Pencil className="h-3 w-3" /></Button>
+        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => onDelete(node.id)}><Trash2 className="h-3 w-3" /></Button>
+      </div>
+    </div>
+    {node.children.map(c => <CategoryRow key={c.id} node={c} depth={depth + 1} onEdit={onEdit} onAdd={onAdd} onDelete={onDelete} />)}
+  </div>
+);
+
 export const AdminCategories = () => {
   const { data: categories, isLoading } = useCategories();
   const queryClient = useQueryClient();
@@ -21,8 +64,8 @@ export const AdminCategories = () => {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', slug: '', icon: '', image: '', parent_id: '' });
 
-  const parents = (categories || []).filter((c: any) => !c.parent_id);
-  const childrenOf = (pid: string) => (categories || []).filter((c: any) => c.parent_id === pid);
+  const tree = buildTree(categories || []);
+  const flatParents = flatten(tree).filter(p => p.id !== editId);
 
   const handleSave = async () => {
     const data: any = {
@@ -46,6 +89,7 @@ export const AdminCategories = () => {
   };
 
   const handleDelete = async (id: string) => {
+    if (!confirm('Delete this category? Subcategories under it will also be affected.')) return;
     await supabase.from('categories').delete().eq('id', id);
     toast.success('Category deleted');
     queryClient.invalidateQueries({ queryKey: ['categories'] });
@@ -62,37 +106,11 @@ export const AdminCategories = () => {
         <Button onClick={() => openAdd()}><Plus className="h-4 w-4 mr-2" />Add Category</Button>
       </div>
       <Card className="border-0 shadow-card">
-        <CardContent className="p-4">
+        <CardContent className="p-2">
           {isLoading ? <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div> : (
-            <div className="space-y-3">
-              {parents.map((cat: any) => (
-                <div key={cat.id} className="rounded-lg border bg-card">
-                  <div className="flex items-center justify-between px-4 py-3">
-                    <div>
-                      <p className="font-medium">{cat.name}</p>
-                      <p className="text-xs text-muted-foreground">/{cat.slug}</p>
-                    </div>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => openAdd(cat.id)}><Plus className="h-3 w-3 mr-1" />Sub</Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(cat)}><Pencil className="h-3 w-3" /></Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(cat.id)}><Trash2 className="h-3 w-3" /></Button>
-                    </div>
-                  </div>
-                  {childrenOf(cat.id).length > 0 && (
-                    <div className="border-t bg-secondary/30 px-4 py-2 space-y-1">
-                      {childrenOf(cat.id).map((sub: any) => (
-                        <div key={sub.id} className="flex items-center justify-between text-sm py-1">
-                          <span>↳ {sub.name} <span className="text-muted-foreground">/{sub.slug}</span></span>
-                          <div className="flex gap-1">
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(sub)}><Pencil className="h-3 w-3" /></Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(sub.id)}><Trash2 className="h-3 w-3" /></Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
+            <div className="space-y-1">
+              {tree.map(node => <CategoryRow key={node.id} node={node} depth={0} onEdit={openEdit} onAdd={openAdd} onDelete={handleDelete} />)}
+              {tree.length === 0 && <p className="text-sm text-muted-foreground text-center py-6">No categories yet.</p>}
             </div>
           )}
         </CardContent>
@@ -105,8 +123,9 @@ export const AdminCategories = () => {
               <Label>Parent (optional)</Label>
               <select className="mt-1 w-full h-10 rounded-md border border-input bg-background px-3 text-sm" value={form.parent_id} onChange={e => setForm(p => ({ ...p, parent_id: e.target.value }))}>
                 <option value="">— Top-level —</option>
-                {parents.filter((c: any) => c.id !== editId).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {flatParents.map(p => <option key={p.id} value={p.id}>{'— '.repeat(p.depth)}{p.name}</option>)}
               </select>
+              <p className="text-xs text-muted-foreground mt-1">You can nest categories to any depth (e.g. Mobiles → Android → Samsung).</p>
             </div>
             <div><Label>Name</Label><Input className="mt-1" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value, slug: e.target.value.toLowerCase().replace(/\s+/g, '-') }))} /></div>
             <div><Label>Slug</Label><Input className="mt-1" value={form.slug} onChange={e => setForm(p => ({ ...p, slug: e.target.value }))} /></div>
