@@ -1,75 +1,41 @@
-# Variants & Hierarchical Categories
+# Plan: 7 storefront & admin enhancements
 
-## 1. Database schema (one migration)
+## 1. Rich text for product descriptions
+- Add TipTap editor (`@tiptap/react`, `@tiptap/starter-kit`, `@tiptap/extension-image`, `@tiptap/extension-link`, `@tiptap/extension-underline`) with a toolbar: bold, italic, underline, headings, lists, links, images, alignment.
+- Paste from web preserves formatting (TipTap default; keep HTML paste, strip only scripts).
+- Store as HTML strings in existing `short_description` / `description` columns (no schema change).
+- Render on ProductDetail with `dangerouslySetInnerHTML` inside a scoped `.prose` container styled via Tailwind Typography plugin.
+- Images pasted as data-URLs get auto-uploaded to `product-images` bucket.
 
-**`categories`**: add `parent_id uuid references categories(id) on delete cascade`, index on `(parent_id, slug)`. Existing rows become top-level (parent_id null).
+## 2. Product preview before publishing
+- In AdminProducts dialog, add a "Preview" button that opens a full-screen `Sheet`/`Dialog` rendering the real `ProductDetail` layout with current form state (no DB write).
+- Extract ProductDetail's view into a `ProductView` component that accepts a product object prop so both live route and preview reuse it.
 
-**`product_variants`** (new):
-- `product_id` → products
-- `color` text nullable, `color_hex` text nullable
-- `storage` text nullable (e.g. "128GB")
-- `price` numeric NOT NULL
-- `discount_price` numeric nullable
-- `stock` int default 0
-- `sku` text nullable
-- `sort_order` int default 0
-- unique (`product_id`, `color`, `storage`)
+## 3. Hamburger menu on tablets
+- Change Navbar breakpoints: hamburger visible below `xl` (currently `lg`), desktop nav shows at `xl:flex`.
 
-**`product_variant_images`** (new): variant-scoped gallery. Columns: `variant_id`, `url`, `sort_order`. Used to switch gallery when a color is picked. (Falls back to product images when a variant has none.)
+## 4. Multi-level nested categories (unlimited depth)
+- DB already has `parent_id` self-reference — extend UI only.
+- Update `useCategoryTree` to build recursively.
+- AdminCategories: render tree recursively with "Add Subcategory" on every node.
+- Routing: add catch-all route `/c/*` that walks the slug path (e.g. `/c/mobiles/android/samsung`) and resolves the deepest category.
 
-**`cart_items`**: add `variant_id uuid references product_variants(id) on delete cascade` nullable. Update unique constraint to `(user_id, product_id, variant_id)`.
+## 5. Remove category hover dropdown
+- Navbar "Categories" becomes a plain link to `/categories` — no hover panel.
 
-**`order_items`**: add `variant_id uuid` nullable, `variant_label text` nullable (snapshot like "Blue · 256GB"), `variant_color text`, `variant_storage text`.
+## 6. Brand-scoped browsing inside a category
+- On `/c/:slug` category page, if products have multiple brands, show a brand grid first (logos + names) plus "All Brands" tile.
+- Selecting a brand navigates to `/c/:slug?brand=<slug>` filtering products by brand within that category subtree.
+- Product form already links a brand + category, so no schema change.
 
-**RLS / grants**: variants & variant_images public-read, admin write (mirrors products/product_images). cart_items / order_items policies unchanged (already scoped by user/order).
+## 7. Admin-editable hero image
+- New table `site_settings` (key/value JSON) OR simpler: reuse existing pattern — create `hero_settings` row with `image_url`, `headline`, `subheadline`, `cta_label`, `cta_href`.
+- Admin: new "Homepage" tab under Settings with image uploader (to `product-images` bucket, `hero/` prefix) and text fields.
+- HeroSection reads from Supabase via a `useHeroSettings` hook, falls back to current defaults.
 
-## 2. Edge function update
+## Technical notes
+- Migration adds `site_settings` table (jsonb value) with admin-only write RLS, public read.
+- Adds `@tiptap/*` and `@tailwindcss/typography` deps.
+- No breaking changes to existing product data — descriptions currently plain text render fine as HTML.
 
-`create-checkout`: when recomputing subtotal, look up price from `product_variants` if `variant_id` is set, else `products`. Snapshot variant label into the Stripe line-item name.
-
-## 3. Admin UI (`AdminProducts.tsx`)
-
-In the product dialog, add a **Variants** section below the existing fields:
-- Table of variant rows (color, color_hex picker, storage, price, discount_price, stock, sku).
-- "Add variant" button.
-- Per-row: upload images for that color (writes to `product_variant_images`, reuses existing `product-images` storage bucket).
-- Remove the now-redundant single Color/Memory specification inputs (data migrated into variants if user re-saves).
-
-New admin page **`AdminCategories.tsx`** (route `/admin/categories`, link in sidebar):
-- Tree view of categories → subcategories.
-- CRUD with parent picker.
-
-## 4. Storefront
-
-**Navigation** (`Navbar.tsx`): replace flat Categories link with a hover/click mega-menu — parent categories as columns, subcategories as links to `/c/{parent}/{child}`.
-
-**Routing** (`App.tsx`):
-- `/c/:parentSlug` → category page (all products in parent + its subcategories)
-- `/c/:parentSlug/:childSlug` → subcategory page (products in that subcategory only)
-- Keep `/shop` for global search/filter.
-
-**`CategoryPage.tsx`** (new): reuses Shop product grid + filters; SEO-friendly `<title>`, `<meta description>`, single `<h1>`, breadcrumb JSON-LD.
-
-**`ProductDetail.tsx`**:
-- Load `product_variants` and `product_variant_images`.
-- Color swatches (using `color_hex`) + storage chips.
-- Selection state determines active variant; price + gallery update reactively (Framer Motion fade for image swap).
-- "Add to cart" passes `variant_id`.
-- Display selected variant label.
-
-**Cart & Checkout**: show variant label under product name; cart hook + context already store the `variant_id`. Quantity merge key becomes `product_id + variant_id`.
-
-## 5. SEO / a11y
-
-- Subcategory URLs are slugged and lower-case.
-- Single H1 per page, descriptive title `<60 chars`, meta description `<160 chars`.
-- Variant swatches have `aria-label` + `aria-pressed`.
-- Selected state visually distinct (ring + checkmark), not color-only.
-
-## Out of scope
-
-- Per-variant promotions or coupon rules.
-- Inventory reservations / oversell protection beyond existing stock field.
-- Bulk variant CSV import (admin can add rows manually).
-
-Approve to proceed and I'll ship it in one pass: migration → edge function → admin → storefront.
+Approve to proceed?
