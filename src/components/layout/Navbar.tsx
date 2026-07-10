@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingCart, Heart, Search, User, Menu, X, Moon, Sun, LogOut } from 'lucide-react';
+import { ShoppingCart, Heart, Search, User, Menu, Moon, Sun, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -14,7 +14,7 @@ import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
-import { useCategoryTree, useUserRoles } from '@/hooks/useProducts';
+import { useCategoryTree, useUserRoles, type CategoryNode } from '@/hooks/useProducts';
 import { useState, useEffect, useRef } from 'react';
 import SearchCommand from '@/components/layout/SearchCommand';
 import gsap from 'gsap';
@@ -27,6 +27,22 @@ const navLinks = [
   { label: 'Blog', href: '/blog' },
   { label: 'Contact', href: '/contact' },
 ];
+
+const MobileCategoryTree = ({ nodes, path = '' }: { nodes: CategoryNode[]; path?: string }) => (
+  <div className="pl-2 border-l border-border/50 ml-2">
+    {nodes.map(node => {
+      const href = `${path}/${node.slug}`;
+      return (
+        <div key={node.id} className="mb-1">
+          <Link to={`/c${href}`} className="py-1.5 px-3 text-xs text-muted-foreground rounded-md hover:bg-secondary block">
+            {node.name}
+          </Link>
+          {node.children.length > 0 && <MobileCategoryTree nodes={node.children} path={href} />}
+        </div>
+      );
+    })}
+  </div>
+);
 
 const Navbar = () => {
   const { totalItems } = useCart();
@@ -55,7 +71,6 @@ const Navbar = () => {
     <>
       <SearchCommand open={searchOpen} onOpenChange={setSearchOpen} />
       <header ref={navRef} className="sticky top-0 z-50 glass">
-        {/* Top bar */}
         <div className="bg-foreground text-background text-xs py-2">
           <div className="container flex justify-between items-center">
             <p className="font-medium tracking-wide">Free shipping on orders over $50 ✦ Premium Electronics</p>
@@ -67,16 +82,15 @@ const Navbar = () => {
           </div>
         </div>
 
-        {/* Main nav */}
         <div className="container flex items-center justify-between h-16 gap-4">
           <div className="flex items-center gap-3">
             <Sheet>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="lg:hidden">
+                <Button variant="ghost" size="icon" className="xl:hidden">
                   <Menu className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="left" className="w-80 p-0">
+              <SheetContent side="left" className="w-80 p-0 overflow-y-auto">
                 <nav className="flex flex-col p-6 gap-1">
                   <Link to="/" className="mb-6">
                     <span className="font-display text-xl font-bold text-gradient">eMobiles</span>
@@ -86,21 +100,19 @@ const Navbar = () => {
                       {link.label}
                     </Link>
                   ))}
-                  <div className="border-t mt-4 pt-4">
-                    <p className="text-sm font-semibold text-muted-foreground mb-2 px-4">Categories</p>
-                    {categoryTree?.map(cat => (
-                      <div key={cat.id} className="mb-2">
-                        <Link to={`/c/${cat.slug}`} className="py-2 px-4 text-sm font-medium rounded-lg hover:bg-secondary block transition-colors">
-                          {cat.name}
-                        </Link>
-                        {cat.children.map(child => (
-                          <Link key={child.id} to={`/c/${cat.slug}/${child.slug}`} className="py-1.5 pl-8 pr-4 text-xs text-muted-foreground rounded-lg hover:bg-secondary block transition-colors">
-                            {child.name}
+                  {categoryTree && categoryTree.length > 0 && (
+                    <div className="border-t mt-4 pt-4">
+                      <p className="text-sm font-semibold text-muted-foreground mb-2 px-4">Browse Categories</p>
+                      {categoryTree.map(cat => (
+                        <div key={cat.id} className="mb-2">
+                          <Link to={`/c/${cat.slug}`} className="py-2 px-4 text-sm font-medium rounded-lg hover:bg-secondary block">
+                            {cat.name}
                           </Link>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
+                          {cat.children.length > 0 && <MobileCategoryTree nodes={cat.children} path={`/${cat.slug}`} />}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </nav>
               </SheetContent>
             </Sheet>
@@ -109,50 +121,17 @@ const Navbar = () => {
             </Link>
           </div>
 
-          <nav className="hidden lg:flex items-center gap-1">
-            {navLinks.map(link => {
-              if (link.label === 'Categories' && categoryTree && categoryTree.length > 0) {
-                return (
-                  <div key={link.href} className="relative group">
-                    <Link
-                      to={link.href}
-                      className="px-4 py-2 text-sm font-medium rounded-lg hover:bg-secondary transition-all duration-200 relative inline-flex items-center"
-                    >
-                      {link.label}
-                      <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-0 h-0.5 bg-primary rounded-full group-hover:w-3/4 transition-all duration-300" />
-                    </Link>
-                    <div className="absolute left-1/2 -translate-x-1/2 top-full pt-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-                      <div className="glass rounded-2xl border shadow-2xl p-6 w-[640px] grid grid-cols-3 gap-6">
-                        {categoryTree.slice(0, 6).map(cat => (
-                          <div key={cat.id}>
-                            <Link to={`/c/${cat.slug}`} className="font-display font-semibold text-sm mb-2 block hover:text-primary transition-colors">
-                              {cat.name}
-                            </Link>
-                            <div className="flex flex-col gap-1">
-                              {cat.children.slice(0, 6).map(child => (
-                                <Link key={child.id} to={`/c/${cat.slug}/${child.slug}`} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
-                                  {child.name}
-                                </Link>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                );
-              }
-              return (
-                <Link
-                  key={link.href}
-                  to={link.href}
-                  className="px-4 py-2 text-sm font-medium rounded-lg hover:bg-secondary transition-all duration-200 relative group"
-                >
-                  {link.label}
-                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-0 h-0.5 bg-primary rounded-full group-hover:w-3/4 transition-all duration-300" />
-                </Link>
-              );
-            })}
+          <nav className="hidden xl:flex items-center gap-1">
+            {navLinks.map(link => (
+              <Link
+                key={link.href}
+                to={link.href}
+                className="px-4 py-2 text-sm font-medium rounded-lg hover:bg-secondary transition-all duration-200 relative group"
+              >
+                {link.label}
+                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-0 h-0.5 bg-primary rounded-full group-hover:w-3/4 transition-all duration-300" />
+              </Link>
+            ))}
           </nav>
 
           <div className="flex items-center gap-1">
@@ -160,11 +139,7 @@ const Navbar = () => {
               <Search className="h-5 w-5" />
             </Button>
 
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-            >
+            <Button variant="ghost" size="icon" onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}>
               {resolvedTheme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
             </Button>
 
@@ -193,9 +168,7 @@ const Navbar = () => {
             {user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon">
-                    <User className="h-5 w-5" />
-                  </Button>
+                  <Button variant="ghost" size="icon"><User className="h-5 w-5" /></Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
                   {isAdmin && (
@@ -204,12 +177,8 @@ const Navbar = () => {
                     </DropdownMenuItem>
                   )}
                   {isAdmin && <DropdownMenuSeparator />}
-                  <DropdownMenuItem asChild>
-                    <Link to="/dashboard" className="cursor-pointer">My Account</Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link to="/dashboard" className="cursor-pointer">Orders</Link>
-                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild><Link to="/dashboard" className="cursor-pointer">My Account</Link></DropdownMenuItem>
+                  <DropdownMenuItem asChild><Link to="/dashboard" className="cursor-pointer">Orders</Link></DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleSignOut} className="text-destructive cursor-pointer">
                     <LogOut className="h-4 w-4 mr-2" />Sign Out
@@ -218,9 +187,7 @@ const Navbar = () => {
               </DropdownMenu>
             ) : (
               <Link to="/auth">
-                <Button variant="ghost" size="icon">
-                  <User className="h-5 w-5" />
-                </Button>
+                <Button variant="ghost" size="icon"><User className="h-5 w-5" /></Button>
               </Link>
             )}
           </div>

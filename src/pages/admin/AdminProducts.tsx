@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, Loader2, Upload, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, Upload, X, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
@@ -13,6 +12,8 @@ import { useAllProducts, useCategories, useBrands } from '@/hooks/useProducts';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import RichTextEditor from '@/components/admin/RichTextEditor';
+import ProductPreview from '@/components/admin/ProductPreview';
 
 const emptyProduct = {
   name: '', slug: '', description: '', short_description: '', price: '', discount_price: '',
@@ -52,6 +53,7 @@ const AdminProducts = () => {
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [existingImages, setExistingImages] = useState<{ id: string; url: string }[]>([]);
   const [variants, setVariants] = useState<VariantDraft[]>([]);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const handleDelete = async (id: string) => {
     const { error } = await supabase.from('products').delete().eq('id', id);
@@ -301,8 +303,17 @@ const AdminProducts = () => {
                 <SelectContent>{brands?.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div className="sm:col-span-2"><Label>Short Description</Label><Input className="mt-1" value={form.short_description} onChange={e => setForm(p => ({ ...p, short_description: e.target.value }))} /></div>
-            <div className="sm:col-span-2"><Label>Description</Label><Textarea className="mt-1" rows={4} value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} /></div>
+            <div className="sm:col-span-2">
+              <Label>Short Description</Label>
+              <div className="mt-1">
+                <RichTextEditor value={form.short_description} onChange={html => setForm(p => ({ ...p, short_description: html }))} placeholder="One-line summary shown in product lists" minHeight={80} />
+              </div>
+            </div>
+            <div className="sm:col-span-2">
+              <Label>Description</Label>
+              <p className="text-xs text-muted-foreground mt-0.5 mb-1">Paste from any website — formatting, images, and links are preserved.</p>
+              <RichTextEditor value={form.description} onChange={html => setForm(p => ({ ...p, description: html }))} placeholder="Full product description" minHeight={240} />
+            </div>
             <div className="sm:col-span-2 flex items-center gap-4">
               <div className="flex items-center gap-2"><Switch checked={form.is_featured} onCheckedChange={v => setForm(p => ({ ...p, is_featured: v }))} /><Label>Featured</Label></div>
               <div className="flex items-center gap-2"><Switch checked={form.is_new} onCheckedChange={v => setForm(p => ({ ...p, is_new: v }))} /><Label>New</Label></div>
@@ -424,12 +435,52 @@ const AdminProducts = () => {
             </div>
           </div>
 
-          <Button className="mt-4 w-full" onClick={handleSave} disabled={saving || !form.name || !form.price}>
-            {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            {editId ? 'Update Product' : 'Create Product'}
-          </Button>
+          <div className="mt-4 flex gap-2">
+            <Button variant="outline" className="flex-1" onClick={() => setPreviewOpen(true)} disabled={!form.name}>
+              <Eye className="h-4 w-4 mr-2" />Preview
+            </Button>
+            <Button className="flex-1" onClick={handleSave} disabled={saving || !form.name || !form.price}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              {editId ? 'Update Product' : 'Create Product'}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
+
+      <ProductPreview
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        product={{
+          name: form.name,
+          short_description: form.short_description,
+          description: form.description,
+          price: parseFloat(form.price) || 0,
+          discount_price: form.discount_price ? parseFloat(form.discount_price) : null,
+          stock: parseInt(form.stock) || 0,
+          sku: form.sku,
+          categoryName: categories?.find((c: any) => c.id === form.category_id)?.name,
+          brandName: brands?.find((b: any) => b.id === form.brand_id)?.name,
+          is_new: form.is_new,
+          is_featured: form.is_featured,
+          is_best_seller: form.is_best_seller,
+          images: [
+            ...existingImages.map(i => i.url),
+            ...imageFiles.map(f => URL.createObjectURL(f)),
+          ],
+          variants: variants.map(v => ({
+            color: v.color,
+            color_hex: v.color_hex,
+            storage: v.storage,
+            price: parseFloat(v.price) || 0,
+            discount_price: v.discount_price ? parseFloat(v.discount_price) : null,
+            stock: parseInt(v.stock) || 0,
+            images: [
+              ...v.existingImages.map(i => i.url),
+              ...v.newImages.map(f => URL.createObjectURL(f)),
+            ],
+          })),
+        }}
+      />
     </div>
   );
 };
