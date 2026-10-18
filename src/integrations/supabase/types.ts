@@ -784,6 +784,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_product_drafts: {
+        Args: {
+          _action: string
+          _id?: string
+          _payload?: Json
+          _product_id?: string
+          _title?: string
+        }
+        Returns: Json
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
