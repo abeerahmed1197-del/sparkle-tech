@@ -379,6 +379,41 @@ export type Database = {
           },
         ]
       }
+      product_drafts: {
+        Row: {
+          created_at: string
+          id: string
+          payload: Json
+          product_id: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          payload?: Json
+          product_id?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          payload?: Json
+          product_id?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_drafts_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_images: {
         Row: {
           created_at: string
@@ -757,6 +792,7 @@ export type Database = {
         Returns: boolean
       }
       increment_coupon_usage: { Args: { _code: string }; Returns: undefined }
+      publish_product_draft: { Args: { _draft_id: string }; Returns: string }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"

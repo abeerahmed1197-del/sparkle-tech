@@ -1,0 +1,6 @@
+- [ ] Private product drafts and atomic publishing
+- [ ] Product editor autosave and current-state preview
+- [ ] Nested category/brand metadata and breadcrumbs
+- [ ] Storefront Quick View
+- [ ] Brand display names and logo uploads
+- [ ] Tests and live-flow verification
