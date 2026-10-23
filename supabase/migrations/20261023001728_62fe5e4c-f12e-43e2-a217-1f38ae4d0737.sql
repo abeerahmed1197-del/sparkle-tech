@@ -1,0 +1,1 @@
+DO $$ DECLARE source text; BEGIN SELECT pg_get_functiondef('public.publish_product_draft(uuid)'::regprocedure) INTO source; source := replace(source, 'IF NOT public.has_role(auth.uid(), ''admin'') THEN', 'IF auth.role() IS DISTINCT FROM ''service_role'' THEN'); EXECUTE source; END $$;
