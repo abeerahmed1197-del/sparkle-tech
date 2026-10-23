@@ -3,7 +3,6 @@ import { Heart, ShoppingCart, Star, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { ProductWithImages } from '@/hooks/useProducts';
 import { useRef, useEffect, useState } from 'react';
@@ -15,7 +14,6 @@ interface ProductCardProps {
 }
 
 const ProductCard = ({ product }: ProductCardProps) => {
-  const { addToCart } = useCart();
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
   const cardRef = useRef<HTMLDivElement>(null);
   const [quickViewOpen, setQuickViewOpen] = useState(false);
@@ -35,31 +33,7 @@ const ProductCard = ({ product }: ProductCardProps) => {
     }
   }, []);
 
-  const handleAddToCart = () => {
-    setQuickViewOpen(true);
-    return;
-    addToCart({
-      id: product.id,
-      name: product.name,
-      slug: product.slug,
-      description: product.description || '',
-      shortDescription: product.short_description || '',
-      price: product.price,
-      discountPrice: product.discount_price ?? undefined,
-      stock: product.stock,
-      sku: product.sku || '',
-      brandId: product.brand_id || '',
-      categoryId: product.category_id || '',
-      images: product.product_images?.map(i => i.url) || [],
-      specifications: product.specifications || {},
-      rating: product.rating,
-      reviewCount: product.review_count,
-      isFeatured: product.is_featured,
-      isNew: product.is_new,
-      isBestSeller: product.is_best_seller,
-      createdAt: product.created_at,
-    });
-  };
+  const handleAddToCart = () => setQuickViewOpen(true);
 
   return (
     <>

@@ -147,66 +147,68 @@ export const AdminBrands = () => {
   const [showDialog, setShowDialog] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', slug: '', logo: '' });
-
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const uploadLogo = async (file: File) => {
+    if (!file.type.startsWith('image/') || file.size > 10 * 1024 * 1024) { toast.error('Choose an image under 10 MB'); return; }
+    setUploading(true);
+    try {
+      const path = `brands/${crypto.randomUUID()}.${file.name.split('.').pop() || 'png'}`;
+      const { error } = await supabase.storage.from('product-images').upload(path, file);
+      if (error) throw error;
+      setForm(p => ({ ...p, logo: supabase.storage.from('product-images').getPublicUrl(path).data.publicUrl }));
+    } catch { toast.error('Could not upload brand image'); }
+    finally { setUploading(false); }
+  };
   const handleSave = async () => {
-    const data = { name: form.name, slug: form.slug || form.name.toLowerCase().replace(/\s+/g, '-'), logo: form.logo || null };
-    if (editId) await supabase.from('brands').update(data).eq('id', editId);
-    else await supabase.from('brands').insert(data);
-    toast.success(editId ? 'Brand updated' : 'Brand created');
-    queryClient.invalidateQueries({ queryKey: ['brands'] });
-    setShowDialog(false);
+    setSaving(true);
+    try {
+      const data = { name: form.name.trim(), slug: form.slug.trim() || form.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), logo: form.logo || null };
+      const { error } = editId ? await supabase.from('brands').update(data).eq('id', editId) : await supabase.from('brands').insert(data);
+      if (error) throw error;
+      toast.success(editId ? 'Brand updated' : 'Brand created');
+      await queryClient.invalidateQueries({ queryKey: ['brands'] });
+      await queryClient.invalidateQueries({ queryKey: ['all-products'] });
+      await queryClient.invalidateQueries({ queryKey: ['products'] });
+      await queryClient.invalidateQueries({ queryKey: ['product'] });
+      setShowDialog(false);
+    } catch { toast.error('Could not save brand. Check that the slug is unique.'); }
+    finally { setSaving(false); }
   };
-
   const handleDelete = async (id: string) => {
-    await supabase.from('brands').delete().eq('id', id);
-    toast.success('Brand deleted'); queryClient.invalidateQueries({ queryKey: ['brands'] });
+    if (!confirm('Delete this brand?')) return;
+    const { error } = await supabase.from('brands').delete().eq('id', id);
+    if (error) { toast.error('Could not delete brand'); return; }
+    toast.success('Brand deleted'); await queryClient.invalidateQueries();
   };
-
-  const openEdit = (b: any) => { setEditId(b.id); setForm({ name: b.name, slug: b.slug, logo: b.logo || '' }); setShowDialog(true); };
+  const openEdit = (b: { id: string; name: string; slug: string; logo: string | null }) => { setEditId(b.id); setForm({ name: b.name, slug: b.slug, logo: b.logo || '' }); setShowDialog(true); };
   const openAdd = () => { setEditId(null); setForm({ name: '', slug: '', logo: '' }); setShowDialog(true); };
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="font-display text-2xl font-bold">Brands</h1>
-        <Button onClick={openAdd}><Plus className="h-4 w-4 mr-2" />Add Brand</Button>
-      </div>
-      <Card className="border-0 shadow-card">
-        <CardContent className="p-0">
-          {isLoading ? <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div> : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead><tr className="border-b bg-secondary/50"><th className="text-left py-3 px-4 font-medium text-muted-foreground">Name</th><th className="text-left py-3 px-4 font-medium text-muted-foreground">Slug</th><th className="text-right py-3 px-4 font-medium text-muted-foreground">Actions</th></tr></thead>
-                <tbody>
-                  {brands?.map(brand => (
-                    <tr key={brand.id} className="border-b last:border-0 hover:bg-secondary/30">
-                      <td className="py-3 px-4 font-medium">{brand.name}</td>
-                      <td className="py-3 px-4 text-muted-foreground">{brand.slug}</td>
-                      <td className="py-3 px-4 text-right"><div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(brand)}><Pencil className="h-3 w-3" /></Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(brand.id)}><Trash2 className="h-3 w-3" /></Button>
-                      </div></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent><DialogHeader><DialogTitle>{editId ? 'Edit' : 'Add'} Brand</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div><Label>Name</Label><Input className="mt-1" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value, slug: e.target.value.toLowerCase().replace(/\s+/g, '-') }))} /></div>
-            <div><Label>Slug</Label><Input className="mt-1" value={form.slug} onChange={e => setForm(p => ({ ...p, slug: e.target.value }))} /></div>
-            <div><Label>Logo URL</Label><Input className="mt-1" value={form.logo} onChange={e => setForm(p => ({ ...p, logo: e.target.value }))} /></div>
+  return <div>
+    <div className="flex items-center justify-between mb-6"><h1 className="font-display text-2xl font-bold">Brands</h1><Button onClick={openAdd}><Plus className="h-4 w-4 mr-2" />Add Brand</Button></div>
+    {isLoading ? <Loader2 className="h-6 w-6 animate-spin text-primary" /> : <div className="divide-y border-y">
+      {brands?.map(brand => <div key={brand.id} className="flex items-center gap-4 py-3">
+        <div className="w-16 h-12 bg-secondary rounded-md flex items-center justify-center p-2">{brand.logo ? <img src={brand.logo} alt={brand.name} className="max-h-full max-w-full object-contain" /> : <span className="font-display font-bold">{brand.name.charAt(0)}</span>}</div>
+        <div className="flex-1 min-w-0"><p className="font-medium truncate">{brand.name}</p><p className="text-xs text-muted-foreground">/{brand.slug}</p></div>
+        <Button variant="ghost" size="icon" aria-label={`Edit ${brand.name}`} onClick={() => openEdit(brand)}><Pencil className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon" aria-label={`Delete ${brand.name}`} onClick={() => handleDelete(brand.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+      </div>)}
+    </div>}
+    <Dialog open={showDialog} onOpenChange={open => { if (!saving && !uploading) setShowDialog(open); }}>
+      <DialogContent><DialogHeader><DialogTitle>{editId ? 'Edit' : 'Add'} Brand</DialogTitle></DialogHeader>
+        <div className="space-y-4">
+          <div><Label htmlFor="brand-name">Display name</Label><Input id="brand-name" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value, ...(!editId ? { slug: e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-') } : {}) }))} /></div>
+          <div><Label htmlFor="brand-slug">Slug</Label><Input id="brand-slug" value={form.slug} onChange={e => setForm(p => ({ ...p, slug: e.target.value }))} /></div>
+          <div><Label>Brand image</Label><div className="mt-2 h-32 border rounded-lg bg-secondary flex items-center justify-center p-4">{form.logo ? <img src={form.logo} alt={form.name || 'Brand image'} className="max-w-full max-h-full object-contain" /> : <span className="text-muted-foreground">No image</span>}</div>
+            <Input type="file" aria-label="Upload brand image" accept="image/*" className="mt-2" disabled={uploading} onChange={e => { const file = e.target.files?.[0]; if (file) void uploadLogo(file); }} />
+            {uploading && <p role="status" className="text-xs text-muted-foreground mt-1">Uploading…</p>}
+            {form.logo && <Button variant="ghost" size="sm" onClick={() => setForm(p => ({ ...p, logo: '' }))}>Remove image</Button>}
           </div>
-          <Button className="mt-4 w-full" onClick={handleSave} disabled={!form.name}>{editId ? 'Update' : 'Create'}</Button>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
+          <div><Label htmlFor="brand-logo">Image URL</Label><Input id="brand-logo" value={form.logo} onChange={e => setForm(p => ({ ...p, logo: e.target.value }))} /></div>
+        </div>
+        <Button onClick={handleSave} disabled={saving || uploading || !form.name.trim()}>{saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Save Brand</Button>
+      </DialogContent>
+    </Dialog>
+  </div>;
 };
 
 // ========== CUSTOMERS ==========
