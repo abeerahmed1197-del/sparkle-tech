@@ -135,6 +135,7 @@ export const useProduct = (slug: string) => {
           product_variants(*, product_variant_images(id, url, sort_order))
         `)
         .eq('slug', slug)
+        .eq('is_active', true)
         .single();
       if (error) throw error;
       return data as ProductWithImages;
