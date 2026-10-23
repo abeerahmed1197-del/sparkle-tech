@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { Plus, Pencil, Trash2, Loader2, Upload, X, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +14,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import RichTextEditor from '@/components/admin/RichTextEditor';
 import ProductPreview from '@/components/admin/ProductPreview';
+import { useAuth } from '@/context/AuthContext';
+import { canPublishProduct, draftOperation, editorRecovery, type EditorSnapshot, type ProductDraft } from '@/lib/product-drafts';
+import { useObjectUrls } from '@/hooks/useObjectUrls';
 
 const emptyProduct = {
   name: '', slug: '', description: '', short_description: '', price: '', discount_price: '',
@@ -55,48 +58,92 @@ const AdminProducts = () => {
   const [variants, setVariants] = useState<VariantDraft[]>([]);
   const [previewOpen, setPreviewOpen] = useState(false);
 
+  const { user } = useAuth();
+  const [drafts, setDrafts] = useState<ProductDraft[]>([]);
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [autosaveStatus, setAutosaveStatus] = useState('');
+  const recoveryKey = `${user?.id || 'signed-out'}:${editId || draftId || 'new'}`;
+  const latest = useRef<EditorSnapshot>({ form, images: existingImages, imageFiles, variants });
+  latest.current = { form, images: existingImages, imageFiles, variants };
+  const productImageUrls = useObjectUrls(imageFiles);
+  const allVariantFiles = useMemo(() => variants.flatMap(v => v.newImages), [variants]);
+  const variantImageUrls = useObjectUrls(allVariantFiles);
+  const variantUrls = (index: number) => {
+    const offset = variants.slice(0, index).reduce((sum, v) => sum + v.newImages.length, 0);
+    return variantImageUrls.slice(offset, offset + variants[index].newImages.length);
+  };
+  const reloadDrafts = async () => {
+    try { setDrafts((await draftOperation('list')) || []); }
+    catch { toast.error('Could not load product drafts'); }
+  };
+  useEffect(() => { if (user) void reloadDrafts(); }, [user?.id]);
+
+  useEffect(() => {
+    if (!showDialog || saving || !user) return;
+    setAutosaveStatus('Saving on this device…');
+    const timer = window.setTimeout(() => {
+      void editorRecovery('write', recoveryKey, latest.current)
+        .then(() => setAutosaveStatus('Autosaved on this device'))
+        .catch(() => setAutosaveStatus('Autosave unavailable — save draft manually'));
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [form, existingImages, imageFiles, variants, showDialog, recoveryKey, saving, user]);
+
+  const applySnapshot = (snapshot: EditorSnapshot) => {
+    setForm(snapshot.form); setExistingImages(snapshot.images || []);
+    setImageFiles(snapshot.imageFiles || []);
+    setVariants((snapshot.variants || []).map(v => ({ ...v, newImages: v.newImages || [], _deletedImages: v._deletedImages || [] })));
+  };
+  const recover = async (key: string, fallback: EditorSnapshot) => {
+    try {
+      const saved = await editorRecovery('read', key);
+      applySnapshot(saved || fallback);
+      if (saved) toast.success('Recovered autosaved changes');
+    } catch { applySnapshot(fallback); }
+    setShowDialog(true);
+  };
+  const handleDialogChange = (open: boolean) => {
+    if (!open && !saving) void editorRecovery('write', recoveryKey, latest.current).catch(() => {});
+    setShowDialog(open);
+  };
   const handleDelete = async (id: string) => {
+    if (!confirm('Delete this product and its drafts?')) return;
     const { error } = await supabase.from('products').delete().eq('id', id);
     if (error) toast.error('Failed to delete');
-    else { toast.success('Product deleted'); queryClient.invalidateQueries({ queryKey: ['all-products'] }); }
+    else { toast.success('Product deleted'); queryClient.invalidateQueries(); await reloadDrafts(); }
   };
-
-  const openAdd = () => {
-    setEditId(null); setForm(emptyProduct); setImageFiles([]); setExistingImages([]); setVariants([]); setShowDialog(true);
+  const openAdd = async () => {
+    setEditId(null); setDraftId(null);
+    await recover(`${user?.id}:new`, { form: emptyProduct, images: [], imageFiles: [], variants: [] });
   };
-
+  const openDraft = async (draft: ProductDraft) => {
+    setEditId(draft.product_id); setDraftId(draft.id);
+    await recover(`${user?.id}:${draft.product_id || draft.id}`, { ...draft.payload, imageFiles: [] });
+  };
   const openEdit = async (p: any) => {
-    setEditId(p.id);
-    setForm({
-      name: p.name, slug: p.slug, description: p.description || '', short_description: p.short_description || '',
-      price: String(p.price), discount_price: p.discount_price ? String(p.discount_price) : '',
-      stock: String(p.stock), sku: p.sku || '', category_id: p.category_id || '', brand_id: p.brand_id || '',
-      is_featured: p.is_featured, is_new: p.is_new, is_best_seller: p.is_best_seller,
+    const draft = drafts.find(d => d.product_id === p.id);
+    if (draft) { await openDraft(draft); return; }
+    setEditId(p.id); setDraftId(null);
+    const { data: vData, error } = await supabase.from('product_variants')
+      .select('*, product_variant_images(id, url, sort_order)').eq('product_id', p.id).order('sort_order');
+    if (error) { toast.error('Could not load variants'); return; }
+    await recover(`${user?.id}:${p.id}`, {
+      form: {
+        name: p.name, slug: p.slug, description: p.description || '', short_description: p.short_description || '',
+        price: String(p.price), discount_price: p.discount_price != null ? String(p.discount_price) : '',
+        stock: String(p.stock), sku: p.sku || '', category_id: p.category_id || '', brand_id: p.brand_id || '',
+        is_featured: p.is_featured, is_new: p.is_new, is_best_seller: p.is_best_seller,
+      },
+      images: p.product_images?.slice().sort((a: any,b: any) => a.sort_order-b.sort_order).map((i: any) => ({ id: i.id, url: i.url })) || [],
+      imageFiles: [],
+      variants: (vData || []).map((v, i) => ({
+        id: v.id, color: v.color || '', color_hex: v.color_hex || '#000000', storage: v.storage || '',
+        price: String(v.price), discount_price: v.discount_price != null ? String(v.discount_price) : '',
+        stock: String(v.stock), sku: v.sku || '', sort_order: v.sort_order ?? i,
+        existingImages: v.product_variant_images.slice().sort((a,b) => a.sort_order-b.sort_order).map(img => ({ id: img.id, url: img.url })),
+        newImages: [], _deletedImages: [],
+      })),
     });
-    setExistingImages(p.product_images?.map((i: any) => ({ id: i.id, url: i.url })) || []);
-    setImageFiles([]);
-
-    // Load variants
-    const { data: vData } = await (supabase as any)
-      .from('product_variants')
-      .select('*, product_variant_images(id, url, sort_order)')
-      .eq('product_id', p.id)
-      .order('sort_order');
-    setVariants(((vData as any[]) || []).map((v, i) => ({
-      id: v.id,
-      color: v.color || '',
-      color_hex: v.color_hex || '#000000',
-      storage: v.storage || '',
-      price: String(v.price),
-      discount_price: v.discount_price != null ? String(v.discount_price) : '',
-      stock: String(v.stock),
-      sku: v.sku || '',
-      sort_order: v.sort_order ?? i,
-      existingImages: (v.product_variant_images || []).map((img: any) => ({ id: img.id, url: img.url })),
-      newImages: [],
-      _deletedImages: [],
-    })));
-    setShowDialog(true);
   };
 
   const generateSlug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -108,109 +155,49 @@ const AdminProducts = () => {
   const addVariant = () => setVariants(prev => [...prev, blankVariant(prev.length)]);
   const removeVariant = (idx: number) => setVariants(prev => prev.filter((_, i) => i !== idx));
 
-  const handleSave = async () => {
+  const handleSave = async (publish = false) => {
+    const snapshot = latest.current;
+    if (publish && !canPublishProduct(snapshot.form, snapshot.variants)) {
+      toast.error('Enter a name, slug, valid prices, and non-negative whole-number stock before publishing'); return;
+    }
     setSaving(true);
     try {
-      const productData: any = {
-        name: form.name,
-        slug: form.slug || generateSlug(form.name),
-        description: form.description,
-        short_description: form.short_description,
-        price: parseFloat(form.price),
-        discount_price: form.discount_price ? parseFloat(form.discount_price) : null,
-        stock: parseInt(form.stock),
-        sku: form.sku || null,
-        category_id: form.category_id || null,
-        brand_id: form.brand_id || null,
-        is_featured: form.is_featured,
-        is_new: form.is_new,
-        is_best_seller: form.is_best_seller,
+      const id = draftId || crypto.randomUUID();
+      const upload = async (file: File) => {
+        const path = `drafts/${id}/${crypto.randomUUID()}.${file.name.split('.').pop() || 'jpg'}`;
+        const { error } = await supabase.storage.from('product-images').upload(path, file);
+        if (error) throw new Error('Image upload failed. Your changes are still autosaved.');
+        return { id: crypto.randomUUID(), url: supabase.storage.from('product-images').getPublicUrl(path).data.publicUrl };
       };
-
-      let productId = editId;
-
-      if (editId) {
-        const { error } = await supabase.from('products').update(productData).eq('id', editId);
-        if (error) throw error;
+      const images = [...snapshot.images, ...await Promise.all(snapshot.imageFiles.map(upload))];
+      const uploadedVariants = await Promise.all(snapshot.variants.map(async v => ({
+        ...v, existingImages: [...v.existingImages, ...await Promise.all(v.newImages.map(upload))],
+        newImages: [], _deletedImages: [],
+      })));
+      const payload = { form: snapshot.form, images, variants: uploadedVariants };
+      await draftOperation('save', { id, productId: editId, title: snapshot.form.name || 'Untitled product', payload });
+      setDraftId(id); setExistingImages(images); setImageFiles([]); setVariants(uploadedVariants);
+      const savedSnapshot = { ...payload, imageFiles: [] };
+      latest.current = savedSnapshot;
+      await editorRecovery('delete', recoveryKey);
+      if (publish) {
+        await draftOperation('publish', { id });
+        await editorRecovery('delete', `${user?.id}:${editId || id}`);
+        setShowDialog(false);
+        toast.success('Product published');
       } else {
-        const { data, error } = await supabase.from('products').insert(productData).select().single();
-        if (error) throw error;
-        productId = data.id;
+        await editorRecovery('write', `${user?.id}:${editId || id}`, savedSnapshot);
+        setAutosaveStatus('Draft saved');
+        toast.success('Draft saved — customer-visible product unchanged');
       }
-
-      // Upload new product images
-      for (let i = 0; i < imageFiles.length; i++) {
-        const file = imageFiles[i];
-        const ext = file.name.split('.').pop();
-        const path = `${productId}/${Date.now()}_${i}.${ext}`;
-        const { error: uploadErr } = await supabase.storage.from('product-images').upload(path, file);
-        if (uploadErr) { toast.error(`Image upload failed: ${uploadErr.message}`); continue; }
-        const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(path);
-        await supabase.from('product_images').insert({
-          product_id: productId!,
-          url: urlData.publicUrl,
-          sort_order: existingImages.length + i,
-        });
-      }
-
-      // Sync variants
-      for (let vi = 0; vi < variants.length; vi++) {
-        const v = variants[vi];
-        const vRow: any = {
-          product_id: productId,
-          color: v.color || null,
-          color_hex: v.color_hex || null,
-          storage: v.storage || null,
-          price: parseFloat(v.price || '0'),
-          discount_price: v.discount_price ? parseFloat(v.discount_price) : null,
-          stock: parseInt(v.stock || '0'),
-          sku: v.sku || null,
-          sort_order: vi,
-        };
-
-        let variantId = v.id;
-        if (variantId) {
-          const { error } = await (supabase as any).from('product_variants').update(vRow).eq('id', variantId);
-          if (error) throw error;
-        } else {
-          const { data, error } = await (supabase as any).from('product_variants').insert(vRow).select().single();
-          if (error) throw error;
-          variantId = data.id;
-        }
-
-        // Delete removed images
-        for (const imgId of v._deletedImages) {
-          await (supabase as any).from('product_variant_images').delete().eq('id', imgId);
-        }
-
-        // Upload new variant images
-        for (let i = 0; i < v.newImages.length; i++) {
-          const file = v.newImages[i];
-          const ext = file.name.split('.').pop();
-          const path = `${productId}/variants/${variantId}/${Date.now()}_${i}.${ext}`;
-          const { error: upErr } = await supabase.storage.from('product-images').upload(path, file);
-          if (upErr) { toast.error(`Variant image failed: ${upErr.message}`); continue; }
-          const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(path);
-          await (supabase as any).from('product_variant_images').insert({
-            variant_id: variantId,
-            url: urlData.publicUrl,
-            sort_order: v.existingImages.length + i,
-          });
-        }
-      }
-
-      toast.success(editId ? 'Product updated' : 'Product created');
-      queryClient.invalidateQueries({ queryKey: ['all-products'] });
-      queryClient.invalidateQueries({ queryKey: ['products'] });
-      setShowDialog(false);
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to save product');
-    }
-    setSaving(false);
+      await queryClient.invalidateQueries();
+      await reloadDrafts();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save product');
+    } finally { setSaving(false); }
   };
 
-  const removeExistingImage = async (imgId: string) => {
-    await supabase.from('product_images').delete().eq('id', imgId);
+  const removeExistingImage = (imgId: string) => {
     setExistingImages(prev => prev.filter(i => i.id !== imgId));
   };
 
@@ -222,6 +209,21 @@ const AdminProducts = () => {
         <h1 className="font-display text-2xl font-bold">Products</h1>
         <Button onClick={openAdd}><Plus className="h-4 w-4 mr-2" />Add Product</Button>
       </div>
+      {drafts.length > 0 && <section className="mb-6">
+        <h2 className="font-display text-lg font-semibold mb-3">Drafts</h2>
+        <div className="divide-y border-y">
+          {drafts.map(d => <div key={d.id} className="flex items-center justify-between gap-3 py-3">
+            <div className="min-w-0"><p className="font-medium truncate">{d.title || 'Untitled product'}</p>
+              <p className="text-xs text-muted-foreground">{d.product_id ? 'Unpublished changes' : 'Not published'} · {new Date(d.updated_at).toLocaleString()}</p></div>
+            <div className="flex gap-1"><Button variant="outline" size="sm" onClick={() => openDraft(d)}>Continue editing</Button>
+              <Button variant="ghost" size="icon" aria-label="Delete draft" onClick={async () => {
+                if (!confirm('Discard this draft? The published product will not change.')) return;
+                try { await draftOperation('delete', { id: d.id }); await editorRecovery('delete', `${user?.id}:${d.product_id || d.id}`); await reloadDrafts(); }
+                catch { toast.error('Could not delete draft'); }
+              }}><Trash2 className="h-4 w-4" /></Button></div>
+          </div>)}
+        </div>
+      </section>}
       <Card className="border-0 shadow-card mb-6">
         <CardContent className="p-4">
           <Input placeholder="Search products..." className="max-w-sm" value={search} onChange={e => setSearch(e.target.value)} />
@@ -260,7 +262,7 @@ const AdminProducts = () => {
                       </td>
                       <td className="py-3 px-4">
                         <Badge variant={product.stock > 0 ? 'default' : 'destructive'} className="text-xs border-0">
-                          {product.stock > 0 ? 'In Stock' : 'Out of Stock'}
+                          {product.is_active ? (drafts.some(d => d.product_id === product.id) ? 'Published · Draft changes' : 'Published') : 'Draft'}
                         </Badge>
                       </td>
                       <td className="py-3 px-4 text-right">
@@ -279,9 +281,9 @@ const AdminProducts = () => {
       </Card>
 
       {/* Add/Edit Dialog */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
+      <Dialog open={showDialog} onOpenChange={handleDialogChange}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{editId ? 'Edit Product' : 'Add Product'}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editId ? 'Edit Product' : 'Add Product'}</DialogTitle><p role="status" className="text-xs text-muted-foreground">{autosaveStatus}</p></DialogHeader>
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2"><Label>Name</Label><Input className="mt-1" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value, slug: generateSlug(e.target.value) }))} /></div>
             <div className="sm:col-span-2"><Label>Slug</Label><Input className="mt-1" value={form.slug} onChange={e => setForm(p => ({ ...p, slug: e.target.value }))} /></div>
@@ -335,7 +337,7 @@ const AdminProducts = () => {
               ))}
               {imageFiles.map((f, i) => (
                 <div key={i} className="relative w-20 h-20 rounded-lg overflow-hidden border">
-                  <img src={URL.createObjectURL(f)} alt="" className="w-full h-full object-cover" />
+                  <img src={productImageUrls[i]} alt="" className="w-full h-full object-cover" />
                   <button onClick={() => setImageFiles(p => p.filter((_, j) => j !== i))} className="absolute top-1 right-1 p-0.5 rounded-full bg-destructive text-destructive-foreground">
                     <X className="h-3 w-3" />
                   </button>
@@ -344,7 +346,7 @@ const AdminProducts = () => {
               <label className="w-20 h-20 rounded-lg border-2 border-dashed border-border flex items-center justify-center cursor-pointer hover:border-primary transition-colors">
                 <Upload className="h-5 w-5 text-muted-foreground" />
                 <input type="file" accept="image/*" multiple className="hidden" onChange={e => {
-                  if (e.target.files) setImageFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+                  const files = e.target.files; if (files) setImageFiles(prev => [...prev, ...Array.from(files)]);
                 }} />
               </label>
             </div>
@@ -413,7 +415,7 @@ const AdminProducts = () => {
                       ))}
                       {v.newImages.map((f, i) => (
                         <div key={i} className="relative w-16 h-16 rounded-md overflow-hidden border">
-                          <img src={URL.createObjectURL(f)} alt="" className="w-full h-full object-cover" />
+                          <img src={variantUrls(idx)[i]} alt="" className="w-full h-full object-cover" />
                           <button onClick={() => updateVariant(idx, { newImages: v.newImages.filter((_, j) => j !== i) })} className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-destructive text-destructive-foreground">
                             <X className="h-2.5 w-2.5" />
                           </button>
@@ -439,9 +441,11 @@ const AdminProducts = () => {
             <Button variant="outline" className="flex-1" onClick={() => setPreviewOpen(true)} disabled={!form.name}>
               <Eye className="h-4 w-4 mr-2" />Preview
             </Button>
-            <Button className="flex-1" onClick={handleSave} disabled={saving || !form.name || !form.price}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              {editId ? 'Update Product' : 'Create Product'}
+            <Button variant="outline" className="flex-1" onClick={() => handleSave(false)} disabled={saving}>
+              Save Draft
+            </Button>
+            <Button className="flex-1" onClick={() => handleSave(true)} disabled={saving || !canPublishProduct(form, variants)}>
+              {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Publish
             </Button>
           </div>
         </DialogContent>
@@ -465,9 +469,9 @@ const AdminProducts = () => {
           is_best_seller: form.is_best_seller,
           images: [
             ...existingImages.map(i => i.url),
-            ...imageFiles.map(f => URL.createObjectURL(f)),
+            ...productImageUrls,
           ],
-          variants: variants.map(v => ({
+          variants: variants.map((v, index) => ({
             color: v.color,
             color_hex: v.color_hex,
             storage: v.storage,
@@ -476,7 +480,7 @@ const AdminProducts = () => {
             stock: parseInt(v.stock) || 0,
             images: [
               ...v.existingImages.map(i => i.url),
-              ...v.newImages.map(f => URL.createObjectURL(f)),
+              ...variantUrls(index),
             ],
           })),
         }}

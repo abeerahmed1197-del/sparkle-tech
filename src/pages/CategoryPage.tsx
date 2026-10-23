@@ -1,67 +1,40 @@
-import { useMemo, useEffect } from 'react';
+import { useMemo } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import ProductCard from '@/components/shared/ProductCard';
-import { useAllProducts, useCategoryTree, type CategoryNode } from '@/hooks/useProducts';
+import { useAllProducts, useCategoryTree, useBrands } from '@/hooks/useProducts';
 
-const setMeta = (title: string, description: string) => {
-  document.title = title;
-  let meta = document.querySelector<HTMLMetaElement>('meta[name="description"]');
-  if (!meta) {
-    meta = document.createElement('meta');
-    meta.name = 'description';
-    document.head.appendChild(meta);
-  }
-  meta.content = description;
-};
-
-// Walk tree by slug path, return [node, breadcrumbTrail]
-const resolvePath = (roots: CategoryNode[], segments: string[]): { node: CategoryNode; trail: CategoryNode[] } | null => {
-  let currentList = roots;
-  const trail: CategoryNode[] = [];
-  let node: CategoryNode | null = null;
-  for (const seg of segments) {
-    const found = currentList.find(c => c.slug === seg);
-    if (!found) return null;
-    trail.push(found);
-    node = found;
-    currentList = found.children;
-  }
-  return node ? { node, trail } : null;
-};
-
-// Collect this node + all descendant slugs
-const collectSlugs = (node: CategoryNode): string[] => {
-  const out = [node.slug];
-  node.children.forEach(c => out.push(...collectSlugs(c)));
-  return out;
-};
+import { Button } from '@/components/ui/button';
+import { resolveCategoryRoute, collectCategoryIds, categoryBrandPath, categorySeo } from '@/lib/category-navigation';
+import { usePageSeo } from '@/hooks/usePageSeo';
 
 const CategoryPage = () => {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const brandFilter = searchParams.get('brand');
-  const { data: tree } = useCategoryTree();
+  const queryBrandFilter = searchParams.get('brand');
+  const { data: tree, isLoading: treeLoading } = useCategoryTree();
+  const { data: allBrands = [], isLoading: brandsLoading } = useBrands();
   const { data: products, isLoading } = useAllProducts();
 
   // Path is everything after /c/
   const segments = useMemo(
-    () => location.pathname.replace(/^\/c\/?/, '').split('/').filter(Boolean),
+    () => location.pathname.replace(/^\/c\/?/, '').split('/').filter(Boolean).map(decodeURIComponent),
     [location.pathname],
   );
 
-  const resolved = useMemo(() => (tree ? resolvePath(tree, segments) : null), [tree, segments]);
+  const resolved = useMemo(() => (tree ? resolveCategoryRoute(tree, segments, allBrands) : null), [tree, segments, allBrands]);
+  const brandFilter = resolved?.brand?.slug || queryBrandFilter;
   const node = resolved?.node || null;
   const trail = resolved?.trail || [];
 
-  const subtreeSlugs = useMemo(() => (node ? collectSlugs(node) : []), [node]);
+  const subtreeIds = useMemo(() => (node ? collectCategoryIds(node) : []), [node]);
 
   const productsInSubtree = useMemo(() => {
     if (!products || !node) return [];
-    return products.filter(p => p.is_active && p.categories && subtreeSlugs.includes(p.categories.slug));
-  }, [products, node, subtreeSlugs]);
+    return products.filter(p => p.is_active && p.categories && subtreeIds.includes(p.category_id || ''));
+  }, [products, node, subtreeIds]);
 
   const brands = useMemo(() => {
     const map = new Map<string, { id: string; name: string; slug: string; logo: string | null; count: number }>();
@@ -79,17 +52,21 @@ const CategoryPage = () => {
     return productsInSubtree.filter(p => p.brands?.slug === brandFilter);
   }, [productsInSubtree, brandFilter]);
 
-  const activeBrand = brandFilter ? brands.find(b => b.slug === brandFilter) : null;
+  const activeBrand = resolved?.brand || (brandFilter ? allBrands.find(b => b.slug === brandFilter) : null) || null;
 
-  useEffect(() => {
-    if (!node) return;
-    const trailName = trail.map(t => t.name).join(' · ');
-    const title = `${activeBrand ? `${activeBrand.name} ${node.name}` : node.name}${trailName && trailName !== node.name ? ` | ${trailName}` : ''} | eMobiles`;
-    const desc = `Shop ${activeBrand ? activeBrand.name + ' ' : ''}${node.name.toLowerCase()} at eMobiles. ${filteredProducts.length} products with fast shipping and 30-day returns.`;
-    setMeta(title.slice(0, 60), desc.slice(0, 160));
-  }, [node, trail, activeBrand, filteredProducts.length]);
+  const ready = !treeLoading && !brandsLoading;
+  const notFound = ready && (!node || (!!brandFilter && !activeBrand));
+  const seo = categorySeo(trail, activeBrand);
+  const crumbs = [
+    { name: 'Home', path: '/' }, { name: 'Categories', path: '/categories' },
+    ...trail.map((t, i) => ({ name: t.name, path: categoryBrandPath(trail.slice(0, i + 1)) })),
+    ...(activeBrand ? [{ name: activeBrand.name, path: seo.path }] : []),
+  ];
+  usePageSeo(notFound ? 'Category Not Found | eMobiles' : ready ? seo.title : 'Categories | eMobiles',
+    notFound ? 'Browse available categories and brands at eMobiles.' : seo.description,
+    node ? seo.path : location.pathname, crumbs, notFound);
 
-  if (!tree) {
+  if (treeLoading || brandsLoading) {
     return (
       <div className="min-h-screen">
         <Navbar />
@@ -99,7 +76,7 @@ const CategoryPage = () => {
     );
   }
 
-  if (!node) {
+  if (!node || notFound) {
     return (
       <div className="min-h-screen">
         <Navbar />
@@ -113,7 +90,7 @@ const CategoryPage = () => {
   }
 
   const basePath = `/c/${trail.map(t => t.slug).join('/')}`;
-  const showBrandGrid = !brandFilter && brands.length > 1 && node.children.length === 0;
+  const showBrandGrid = !brandFilter && searchParams.get('view') !== 'products' && brands.length > 1;
 
   return (
     <div className="min-h-screen">
@@ -144,7 +121,7 @@ const CategoryPage = () => {
 
       <header className="container pt-2 pb-8">
         <h1 className="font-display text-3xl md:text-5xl font-bold tracking-tight">
-          {activeBrand ? `${activeBrand.name} ${node.name}` : node.name}
+          {seo.label}
         </h1>
         <p className="text-muted-foreground mt-2">{filteredProducts.length} products</p>
 
@@ -153,7 +130,7 @@ const CategoryPage = () => {
             {node.children.map(c => (
               <Link
                 key={c.id}
-                to={`${basePath}/${c.slug}`}
+                to={categoryBrandPath([...trail, c])}
                 className="px-4 py-2 rounded-full border border-border bg-card text-sm font-medium hover:border-primary hover:text-primary transition-colors"
               >
                 {c.name}
@@ -176,27 +153,28 @@ const CategoryPage = () => {
           <div>
             <div className="mb-6 flex items-baseline justify-between">
               <h2 className="font-display text-xl font-semibold">Shop by Brand</h2>
-              <button
-                onClick={() => setSearchParams({})}
+              <Button
+                onClick={() => setSearchParams({ view: 'products' })}
                 className="text-sm text-muted-foreground hover:text-foreground"
               >
                 View all products →
-              </button>
+              </Button>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-              <button
-                onClick={() => setSearchParams({})}
-                className="group aspect-square rounded-2xl border-2 border-dashed border-border hover:border-primary bg-secondary/30 flex flex-col items-center justify-center text-center p-4 transition"
+              <Button
+                onClick={() => setSearchParams({ view: 'products' })}
+                className="group h-auto aspect-square rounded-lg border-2 border-dashed border-border hover:border-primary bg-secondary/30 flex flex-col items-center justify-center text-center p-4 transition"
               >
                 <span className="font-display text-2xl font-bold text-gradient">All</span>
                 <span className="text-xs text-muted-foreground mt-1">{productsInSubtree.length} products</span>
-              </button>
+              </Button>
               {brands.map(b => (
-                <button
+                <Button
                   key={b.id}
-                  onClick={() => setSearchParams({ brand: b.slug })}
-                  className="group aspect-square rounded-2xl border bg-card hover:border-primary hover:shadow-lg flex flex-col items-center justify-center p-4 transition"
+                  asChild
+                  className="group h-auto aspect-square rounded-lg border bg-card hover:border-primary hover:shadow-lg flex flex-col items-center justify-center p-4 transition"
                 >
+                  <Link to={categoryBrandPath(trail, b)} className="flex h-full w-full flex-col items-center justify-center whitespace-normal">
                   {b.logo ? (
                     <img src={b.logo} alt={b.name} className="max-h-16 max-w-full object-contain mb-2 opacity-80 group-hover:opacity-100" />
                   ) : (
@@ -206,34 +184,30 @@ const CategoryPage = () => {
                   )}
                   <span className="text-sm font-medium">{b.name}</span>
                   <span className="text-xs text-muted-foreground">{b.count} items</span>
-                </button>
+                  </Link>
+                </Button>
               ))}
             </div>
-            <div className="mt-12">
-              <h3 className="font-display text-lg font-semibold mb-4">All {node.name}</h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
-                {productsInSubtree.map(p => <ProductCard key={p.id} product={p} />)}
-              </div>
-            </div>
+
           </div>
         ) : (
           <>
             {brands.length > 1 && (
               <div className="mb-6 flex flex-wrap gap-2 items-center">
-                <button
-                  onClick={() => setSearchParams({})}
+                <Button
+                  onClick={() => setSearchParams({ view: 'products' })}
                   className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${!brandFilter ? 'bg-primary text-primary-foreground border-primary' : 'border-border hover:border-primary'}`}
                 >
-                  All brands
-                </button>
+                  <Link to={`${basePath}?view=products`}>All brands</Link>
+                </Button>
                 {brands.map(b => (
-                  <button
+                  <Button
                     key={b.id}
-                    onClick={() => setSearchParams({ brand: b.slug })}
+                    asChild
                     className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${brandFilter === b.slug ? 'bg-primary text-primary-foreground border-primary' : 'border-border hover:border-primary'}`}
                   >
-                    {b.name} <span className="opacity-60">({b.count})</span>
-                  </button>
+                    <Link to={categoryBrandPath(trail, b)}>{b.name} <span className="opacity-60">({b.count})</span></Link>
+                  </Button>
                 ))}
               </div>
             )}

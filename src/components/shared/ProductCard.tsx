@@ -1,22 +1,22 @@
 import { Link } from 'react-router-dom';
-import { Heart, ShoppingCart, Star } from 'lucide-react';
+import { Heart, ShoppingCart, Star, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { useCart } from '@/context/CartContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { ProductWithImages } from '@/hooks/useProducts';
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import gsap from 'gsap';
+import ProductQuickView from '@/components/shared/ProductQuickView';
 
 interface ProductCardProps {
   product: ProductWithImages;
 }
 
 const ProductCard = ({ product }: ProductCardProps) => {
-  const { addToCart } = useCart();
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
   const cardRef = useRef<HTMLDivElement>(null);
+  const [quickViewOpen, setQuickViewOpen] = useState(false);
   const inWishlist = isInWishlist(product.id);
   const discount = product.discount_price
     ? Math.round(((product.price - product.discount_price) / product.price) * 100)
@@ -33,31 +33,10 @@ const ProductCard = ({ product }: ProductCardProps) => {
     }
   }, []);
 
-  const handleAddToCart = () => {
-    addToCart({
-      id: product.id,
-      name: product.name,
-      slug: product.slug,
-      description: product.description || '',
-      shortDescription: product.short_description || '',
-      price: product.price,
-      discountPrice: product.discount_price ?? undefined,
-      stock: product.stock,
-      sku: product.sku || '',
-      brandId: product.brand_id || '',
-      categoryId: product.category_id || '',
-      images: product.product_images?.map(i => i.url) || [],
-      specifications: product.specifications || {},
-      rating: product.rating,
-      reviewCount: product.review_count,
-      isFeatured: product.is_featured,
-      isNew: product.is_new,
-      isBestSeller: product.is_best_seller,
-      createdAt: product.created_at,
-    });
-  };
+  const handleAddToCart = () => setQuickViewOpen(true);
 
   return (
+    <>
     <Card ref={cardRef} className="group overflow-hidden border-0 shadow-card hover:shadow-card-hover transition-all duration-500 hover:-translate-y-2 bg-card">
       <div className="relative aspect-square overflow-hidden bg-secondary/50">
         <Link to={`/product/${product.slug}`}>
@@ -78,7 +57,8 @@ const ProductCard = ({ product }: ProductCardProps) => {
         </div>
 
         {/* Actions */}
-        <div className="absolute top-3 right-3 flex flex-col gap-2 opacity-0 group-hover:opacity-100 translate-x-2 group-hover:translate-x-0 transition-all duration-300">
+        <div className="absolute top-3 right-3 flex flex-col gap-2 sm:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-all duration-300">
+          <Button size="icon" variant="secondary" className="h-9 w-9 rounded-full shadow-elevation-2" title="Quick View" aria-label={`Quick View ${product.name}`} onClick={() => setQuickViewOpen(true)}><Eye className="h-4 w-4" /></Button>
           <Button
             size="icon"
             variant="secondary"
@@ -98,7 +78,7 @@ const ProductCard = ({ product }: ProductCardProps) => {
           </Button>
         </div>
 
-        <div className="absolute bottom-3 left-3 right-3 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 delay-75">
+        <div className="absolute bottom-3 left-3 right-3 sm:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-all duration-300 delay-75">
           <Button
             size="sm"
             className="w-full shadow-elevation-2 backdrop-blur-sm"
@@ -138,6 +118,8 @@ const ProductCard = ({ product }: ProductCardProps) => {
         </div>
       </CardContent>
     </Card>
+    {quickViewOpen && <ProductQuickView slug={product.slug} open={quickViewOpen} onOpenChange={setQuickViewOpen} />}
+    </>
   );
 };
 
