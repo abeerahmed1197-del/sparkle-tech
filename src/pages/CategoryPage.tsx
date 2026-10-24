@@ -89,7 +89,7 @@ const CategoryPage = () => {
     );
   }
 
-  const basePath = `/c/${trail.map(t => t.slug).join('/')}`;
+  const basePath = categoryBrandPath(trail);
   const showBrandGrid = !brandFilter && searchParams.get('view') !== 'products' && brands.length > 1;
 
   return (
@@ -101,19 +101,19 @@ const CategoryPage = () => {
           <Link to="/" className="hover:text-foreground">Home</Link><span>/</span>
           <Link to="/categories" className="hover:text-foreground">Categories</Link>
           {trail.map((t, i) => {
-            const href = `/c/${trail.slice(0, i + 1).map(x => x.slug).join('/')}`;
+            const href = categoryBrandPath(trail.slice(0, i + 1));
             const isLast = i === trail.length - 1 && !activeBrand;
             return (
               <span key={t.id} className="flex items-center gap-2">
                 <span>/</span>
-                {isLast ? <span className="text-foreground">{t.name}</span> : <Link to={href} className="hover:text-foreground">{t.name}</Link>}
+                {isLast ? <span aria-current="page" className="text-foreground">{t.name}</span> : <Link to={href} className="hover:text-foreground">{t.name}</Link>}
               </span>
             );
           })}
           {activeBrand && (
             <>
               <span>/</span>
-              <span className="text-foreground">{activeBrand.name}</span>
+              <span aria-current="page" className="text-foreground">{activeBrand.name}</span>
             </>
           )}
         </nav>
@@ -153,7 +153,7 @@ const CategoryPage = () => {
           <div>
             <div className="mb-6 flex items-baseline justify-between">
               <h2 className="font-display text-xl font-semibold">Shop by Brand</h2>
-              <Button
+              <Button variant="ghost"
                 onClick={() => setSearchParams({ view: 'products' })}
                 className="text-sm text-muted-foreground hover:text-foreground"
               >
@@ -161,7 +161,7 @@ const CategoryPage = () => {
               </Button>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-              <Button
+              <Button variant="outline"
                 onClick={() => setSearchParams({ view: 'products' })}
                 className="group h-auto aspect-square rounded-lg border-2 border-dashed border-border hover:border-primary bg-secondary/30 flex flex-col items-center justify-center text-center p-4 transition"
               >
@@ -169,7 +169,7 @@ const CategoryPage = () => {
                 <span className="text-xs text-muted-foreground mt-1">{productsInSubtree.length} products</span>
               </Button>
               {brands.map(b => (
-                <Button
+                <Button variant="outline"
                   key={b.id}
                   asChild
                   className="group h-auto aspect-square rounded-lg border bg-card hover:border-primary hover:shadow-lg flex flex-col items-center justify-center p-4 transition"
@@ -194,14 +194,14 @@ const CategoryPage = () => {
           <>
             {brands.length > 1 && (
               <div className="mb-6 flex flex-wrap gap-2 items-center">
-                <Button
-                  onClick={() => setSearchParams({ view: 'products' })}
+                <Button variant="outline"
+                  asChild
                   className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${!brandFilter ? 'bg-primary text-primary-foreground border-primary' : 'border-border hover:border-primary'}`}
                 >
                   <Link to={`${basePath}?view=products`}>All brands</Link>
                 </Button>
                 {brands.map(b => (
-                  <Button
+                  <Button variant="outline"
                     key={b.id}
                     asChild
                     className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${brandFilter === b.slug ? 'bg-primary text-primary-foreground border-primary' : 'border-border hover:border-primary'}`}

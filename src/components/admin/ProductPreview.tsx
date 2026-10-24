@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ShoppingCart, Heart, Truck, Shield, RotateCcw, Star, Minus, Plus, Check } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 interface PreviewProduct {
   name: string;
@@ -41,6 +41,13 @@ const ProductPreview = ({ open, onOpenChange, product }: Props) => {
   const [selectedImage, setSelectedImage] = useState(0);
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [selectedStorage, setSelectedStorage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setSelectedImage(0);
+    setSelectedColor(product.variants[0]?.color || null);
+    setSelectedStorage(product.variants[0]?.storage || null);
+  }, [open]);
 
   const colorOptions = useMemo(() => {
     const seen = new Map<string, string>();
@@ -134,7 +141,11 @@ const ProductPreview = ({ open, onOpenChange, product }: Props) => {
                   {colorOptions.map(opt => {
                     const active = selectedColor === opt.color;
                     return (
-                      <button key={opt.color} onClick={() => setSelectedColor(opt.color)}
+                      <button key={opt.color} aria-label={`Select ${opt.color}`} onClick={() => {
+                        setSelectedColor(opt.color);
+                        setSelectedStorage(product.variants.find(v => v.color === opt.color)?.storage || null);
+                        setSelectedImage(0);
+                      }}
                         className={`relative h-10 w-10 rounded-full border-2 transition ${active ? 'border-primary ring-2 ring-primary/30' : 'border-border'}`}
                         style={{ background: opt.hex }}>
                         {active && <Check className="absolute inset-0 m-auto h-4 w-4 text-white mix-blend-difference" />}
