@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import { allowsDraftAccess } from './access.ts';
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version' };
 const respond = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
@@ -15,8 +16,8 @@ Deno.serve(async req => {
     if (!token) return respond({ error: 'Sign in required' }, 401);
     const { data: { user }, error: authError } = await client.auth.getUser(token);
     if (authError || !user) return respond({ error: 'Sign in required' }, 401);
-    const { data: role, error: roleError } = await client.from('user_roles').select('id').eq('user_id', user.id).eq('role', 'admin').maybeSingle();
-    if (roleError || !role) return respond({ error: 'Admin access required' }, 403);
+    const { data: roles, error: roleError } = await client.from('user_roles').select('user_id, role').eq('user_id', user.id).eq('role', 'admin');
+    if (roleError || !allowsDraftAccess(user, roles || [])) return respond({ error: 'Admin access required' }, 403);
     const body = await req.json();
     if (!['list', 'save', 'delete', 'publish'].includes(body.action)) return respond({ error: 'Invalid request' }, 400);
     const result = body.action === 'publish'

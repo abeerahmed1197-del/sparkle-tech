@@ -1,6 +1,7 @@
-- [ ] Private product drafts and atomic publishing
-- [ ] Product editor autosave and current-state preview
-- [ ] Nested category/brand metadata and breadcrumbs
-- [ ] Storefront Quick View
-- [ ] Brand display names and logo uploads
-- [ ] Tests and live-flow verification
+- [x] Private product drafts and atomic publishing
+- [x] Product editor autosave and current-state preview
+- [x] Nested category/brand metadata and breadcrumbs
+- [x] Storefront Quick View
+- [x] Brand display names and logo uploads
+- [x] Publishing/category rules tests and public storefront verification
+- [ ] Authenticated admin save/publish, recovery, and logo upload verification — external Supabase sessions cannot be supplied by this workspace

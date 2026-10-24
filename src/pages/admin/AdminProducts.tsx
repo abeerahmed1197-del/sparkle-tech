@@ -103,6 +103,7 @@ const AdminProducts = () => {
     setShowDialog(true);
   };
   const handleDialogChange = (open: boolean) => {
+    if (saving) return;
     if (!open && !saving) void editorRecovery('write', recoveryKey, latest.current).catch(() => {});
     setShowDialog(open);
   };
@@ -284,6 +285,7 @@ const AdminProducts = () => {
       <Dialog open={showDialog} onOpenChange={handleDialogChange}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editId ? 'Edit Product' : 'Add Product'}</DialogTitle><p role="status" className="text-xs text-muted-foreground">{autosaveStatus}</p></DialogHeader>
+          <fieldset disabled={saving} className="min-w-0">
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2"><Label>Name</Label><Input className="mt-1" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value, slug: generateSlug(e.target.value) }))} /></div>
             <div className="sm:col-span-2"><Label>Slug</Label><Input className="mt-1" value={form.slug} onChange={e => setForm(p => ({ ...p, slug: e.target.value }))} /></div>
@@ -448,6 +450,7 @@ const AdminProducts = () => {
               {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Publish
             </Button>
           </div>
+          </fieldset>
         </DialogContent>
       </Dialog>
 
