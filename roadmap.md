@@ -3,5 +3,6 @@
 - [x] Nested category/brand metadata and breadcrumbs
 - [x] Storefront Quick View
 - [x] Brand display names and logo uploads
+- [x] Product comparison: card/detail toggle, selection bar, side-by-side spec/price/variant table
 - [x] Publishing/category rules tests and public storefront verification
 - [ ] Authenticated admin save/publish, recovery, and logo upload verification — external Supabase sessions cannot be supplied by this workspace

@@ -315,3 +315,30 @@ export const useUserRoles = () => {
     },
   });
 };
+
+// Full product payloads for the compare page and bar, ordered as the shopper selected them.
+export const useCompareProducts = (ids: string[]) => {
+  const key = ids.join(',');
+  return useQuery({
+    queryKey: ['compare-products', key],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('products')
+        .select(`
+          *,
+          product_images(id, url, sort_order),
+          brands(id, name, slug, logo),
+          categories(id, name, slug, icon, image, parent_id),
+          product_variants(*, product_variant_images(id, url, sort_order))
+        `)
+        .in('id', ids)
+        .eq('is_active', true);
+      if (error) throw error;
+      const rows = (data as unknown as ProductWithImages[]) || [];
+      return ids
+        .map(id => rows.find(p => p.id === id))
+        .filter((p): p is ProductWithImages => !!p);
+    },
+    enabled: ids.length > 0,
+  });
+};
