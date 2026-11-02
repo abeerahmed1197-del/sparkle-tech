@@ -24,6 +24,7 @@ const ProductDetail = () => {
   const { data: product, isLoading } = useProduct(slug!);
   const { addToCart } = useCart();
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
+  const { toggleCompare, isInCompare } = useCompare();
   const { user } = useAuth();
   const [quantity, setQuantity] = useState(1);
   const [selectedImage, setSelectedImage] = useState(0);
@@ -306,10 +307,22 @@ const ProductDetail = () => {
               <Button size="lg" className="flex-1 h-12" onClick={handleAdd} disabled={stockAvailable <= 0}>
                 <ShoppingCart className="h-4 w-4 mr-2" /> Add to Cart
               </Button>
-              <Button size="lg" variant="outline" className="h-12" onClick={() => inWishlist ? removeFromWishlist(product.id) : addToWishlist(productLegacy)}>
+              <Button
+                size="lg"
+                variant="outline"
+                className="h-12 px-4"
+                title={isInCompare(product.id) ? 'Remove from Compare' : 'Add to Compare'}
+                aria-pressed={isInCompare(product.id)}
+                onClick={() => toggleCompare(product.id, product.name)}
+              >
+                <Scale className={`h-4 w-4 ${isInCompare(product.id) ? 'text-primary' : ''}`} />
+              </Button>
+              <Button size="lg" variant="outline" className="h-12 px-4" onClick={() => inWishlist ? removeFromWishlist(product.id) : addToWishlist(productLegacy)}>
                 <Heart className={`h-4 w-4 ${inWishlist ? 'fill-destructive text-destructive' : ''}`} />
               </Button>
             </div>
+
+            <Link to="/compare" className="text-sm text-primary hover:underline mb-6 inline-block">Compare with other products</Link>
 
             {selectedVariant && (
               <p className="text-sm text-muted-foreground mb-6">Selected: <span className="text-foreground font-medium">{variantLabel(selectedVariant)}</span></p>
