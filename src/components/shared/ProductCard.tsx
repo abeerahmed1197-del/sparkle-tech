@@ -16,9 +16,11 @@ interface ProductCardProps {
 
 const ProductCard = ({ product }: ProductCardProps) => {
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
+  const { toggleCompare, isInCompare } = useCompare();
   const cardRef = useRef<HTMLDivElement>(null);
   const [quickViewOpen, setQuickViewOpen] = useState(false);
   const inWishlist = isInWishlist(product.id);
+  const inCompare = isInCompare(product.id);
   const discount = product.discount_price
     ? Math.round(((product.price - product.discount_price) / product.price) * 100)
     : 0;
@@ -60,6 +62,17 @@ const ProductCard = ({ product }: ProductCardProps) => {
         {/* Actions */}
         <div className="absolute top-3 right-3 flex flex-col gap-2 sm:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-all duration-300">
           <Button size="icon" variant="secondary" className="h-9 w-9 rounded-full shadow-elevation-2" title="Quick View" aria-label={`Quick View ${product.name}`} onClick={() => setQuickViewOpen(true)}><Eye className="h-4 w-4" /></Button>
+          <Button
+            size="icon"
+            variant="secondary"
+            className={`h-9 w-9 rounded-full shadow-elevation-2 ${inCompare ? 'text-primary' : ''}`}
+            title={inCompare ? 'Remove from Compare' : 'Add to Compare'}
+            aria-label={`${inCompare ? 'Remove' : 'Add'} ${product.name} ${inCompare ? 'from' : 'to'} compare`}
+            aria-pressed={inCompare}
+            onClick={() => toggleCompare(product.id, product.name)}
+          >
+            <Scale className={`h-4 w-4 ${inCompare ? 'text-primary' : ''}`} />
+          </Button>
           <Button
             size="icon"
             variant="secondary"
