@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom';
-import { Heart, ShoppingCart, Star, Eye } from 'lucide-react';
+import { Heart, ShoppingCart, Star, Eye, Scale } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { useWishlist } from '@/context/WishlistContext';
+import { useCompare } from '@/context/CompareContext';
 import { ProductWithImages } from '@/hooks/useProducts';
 import { useRef, useEffect, useState } from 'react';
 import gsap from 'gsap';
