@@ -46,6 +46,7 @@ const App = () => (
         <AuthProvider>
           <CartProvider>
             <WishlistProvider>
+              <CompareProvider>
               <Toaster />
               <Sonner />
               <BrowserRouter>
@@ -55,6 +56,7 @@ const App = () => (
                   <Route path="/product/:slug" element={<ProductDetail />} />
                   <Route path="/cart" element={<Cart />} />
                   <Route path="/wishlist" element={<Wishlist />} />
+                  <Route path="/compare" element={<Compare />} />
                   <Route path="/checkout" element={<Checkout />} />
                   <Route path="/order-success" element={<OrderSuccess />} />
                   <Route path="/auth" element={<Auth />} />
