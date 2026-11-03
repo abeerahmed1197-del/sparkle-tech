@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -29,6 +29,17 @@ const Shop = () => {
   const { data: allProducts, isLoading } = useProducts();
   const { data: categories } = useCategories();
   const { data: brands } = useBrands();
+
+  // Slider bounds follow the real catalog prices so no product is ever filtered out by default.
+  const priceBounds = useMemo<[number, number]>(() => {
+    if (!allProducts?.length) return [0, 1500];
+    const prices = allProducts.map(p => p.discount_price ?? p.price);
+    return [Math.floor(Math.min(...prices)), Math.ceil(Math.max(...prices))];
+  }, [allProducts]);
+
+  useEffect(() => {
+    setPriceRange(priceBounds);
+  }, [priceBounds[0], priceBounds[1]]);
 
   const filteredProducts = useMemo(() => {
     if (!allProducts) return [];
@@ -98,13 +109,13 @@ const Shop = () => {
       <Separator />
       <div>
         <h4 className="font-display font-semibold mb-3">Price Range</h4>
-        <Slider min={0} max={1500} step={10} value={priceRange} onValueChange={setPriceRange} className="mb-3" />
+        <Slider min={priceBounds[0]} max={priceBounds[1]} step={10} value={priceRange} onValueChange={setPriceRange} className="mb-3" />
         <div className="flex justify-between text-sm text-muted-foreground">
-          <span>${priceRange[0]}</span>
-          <span>${priceRange[1]}</span>
+          <span>{priceRange[0].toLocaleString()}</span>
+          <span>{priceRange[1].toLocaleString()}</span>
         </div>
       </div>
-      <Button variant="outline" className="w-full" onClick={() => { setSelectedCategories([]); setSelectedBrands([]); setPriceRange([0, 1500]); }}>
+      <Button variant="outline" className="w-full" onClick={() => { setSelectedCategories([]); setSelectedBrands([]); setPriceRange(priceBounds); }}>
         Clear Filters
       </Button>
     </div>
@@ -178,7 +189,7 @@ const Shop = () => {
             ) : (
               <div className="text-center py-20">
                 <p className="text-muted-foreground">No products found matching your criteria.</p>
-                <Button variant="outline" className="mt-4" onClick={() => { setSearch(''); setSelectedCategories([]); setSelectedBrands([]); setPriceRange([0, 1500]); }}>
+                <Button variant="outline" className="mt-4" onClick={() => { setSearch(''); setSelectedCategories([]); setSelectedBrands([]); setPriceRange(priceBounds); }}>
                   Clear All Filters
                 </Button>
               </div>
