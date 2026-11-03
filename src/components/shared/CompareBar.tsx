@@ -1,9 +1,18 @@
+import { Component, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Scale, X, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCompare } from '@/context/CompareContext';
 import { useCompareProducts } from '@/hooks/useProducts';
 import { MAX_COMPARE } from '@/lib/compare';
+
+// The bar is mounted on every storefront route: isolate any failure in it so a
+// bug here can never blank the whole app.
+class CompareBarBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  render() { return this.state.failed ? null : this.props.children; }
+}
 
 const CompareBar = () => {
   const { ids, removeCompare, clearCompare } = useCompare();
@@ -63,4 +72,10 @@ const CompareBar = () => {
   );
 };
 
-export default CompareBar;
+const CompareBarWithBoundary = () => (
+  <CompareBarBoundary>
+    <CompareBar />
+  </CompareBarBoundary>
+);
+
+export default CompareBarWithBoundary;

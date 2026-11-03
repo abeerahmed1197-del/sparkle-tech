@@ -4,5 +4,6 @@
 - [x] Storefront Quick View
 - [x] Brand display names and logo uploads
 - [x] Product comparison: card/detail toggle, selection bar, side-by-side spec/price/variant table
+- [x] Shop price filter no longer hides products: slider bounds derive from live catalog prices
 - [x] Publishing/category rules tests and public storefront verification
 - [ ] Authenticated admin save/publish, recovery, and logo upload verification — external Supabase sessions cannot be supplied by this workspace
