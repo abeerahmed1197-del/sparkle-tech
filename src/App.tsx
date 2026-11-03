@@ -90,8 +90,8 @@ const App = () => (
 
                   <Route path="*" element={<NotFound />} />
                 </Routes>
+                <CompareBar />
               </BrowserRouter>
-              <CompareBar />
               </CompareProvider>
             </WishlistProvider>
           </CartProvider>
