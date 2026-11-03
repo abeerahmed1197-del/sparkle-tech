@@ -72,4 +72,10 @@ const CompareBar = () => {
   );
 };
 
-export default CompareBar;
+const CompareBarWithBoundary = () => (
+  <CompareBarBoundary>
+    <CompareBar />
+  </CompareBarBoundary>
+);
+
+export default CompareBarWithBoundary;
